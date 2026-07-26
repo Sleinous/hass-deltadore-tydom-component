@@ -5,8 +5,8 @@ import importlib.util
 from pathlib import Path
 import sys
 import types
-from unittest import IsolatedAsyncioTestCase
-from unittest.mock import AsyncMock, MagicMock, call
+from unittest import IsolatedAsyncioTestCase, TestCase
+from unittest.mock import AsyncMock, MagicMock, call, patch
 
 _MISSING = object()
 _original_modules: dict[str, object] = {}
@@ -26,6 +26,10 @@ class _ClientConnectionError(Exception):
     """Stand-in for aiohttp.ClientConnectionError."""
 
 
+class _WSServerHandshakeError(Exception):
+    """Stand-in for aiohttp.WSServerHandshakeError."""
+
+
 class _WebSocketResponse:
     """Stand-in used only to evaluate runtime annotations."""
 
@@ -42,6 +46,7 @@ aiohttp = _module(
     "aiohttp",
     ClientError=Exception,
     ClientConnectionError=_ClientConnectionError,
+    WSServerHandshakeError=_WSServerHandshakeError,
     ClientSession=object,
     ClientWebSocketResponse=_WebSocketResponse,
     WSMsgType=MagicMock(),
@@ -100,6 +105,11 @@ TydomClientApiClientCommunicationError = (
     client_module.TydomClientApiClientCommunicationError
 )
 sanitize_log_message = client_module.sanitize_log_message
+TydomClientApiClientAuthenticationError = (
+    client_module.TydomClientApiClientAuthenticationError
+)
+gateway_password_for_mac = client_module._gateway_password_for_mac
+parse_digest_challenge = client_module._parse_digest_challenge
 
 for name, original in _original_modules.items():
     if original is _MISSING:
@@ -119,6 +129,107 @@ def _websocket() -> MagicMock:
     connection.close = AsyncMock(side_effect=close)
     connection.send_bytes = AsyncMock()
     return connection
+
+
+class TestCloudAuthentication(TestCase):
+    """Exercise cloud credential selection and Digest challenge handling."""
+
+    def test_matching_site_supplies_gateway_password(self) -> None:
+        """A multi-site account must not always use the first site's password."""
+        payload = {
+            "sites": [
+                {
+                    "gateway": {
+                        "mac": "001A25000001",
+                        "password": "wrong-site-password",
+                    }
+                },
+                {
+                    "gateway": {
+                        "mac": "00:1a:25:05:f4:b1",
+                        "password": "matching-password",
+                    }
+                },
+            ]
+        }
+
+        self.assertEqual(
+            gateway_password_for_mac(payload, "001A2505F4B1"),
+            "matching-password",
+        )
+
+    def test_missing_matching_gateway_credentials_raise_authentication_error(
+        self,
+    ) -> None:
+        """Missing credentials must not fall back to another site's password."""
+        payload = {
+            "sites": [
+                {
+                    "gateway": {
+                        "mac": "001A25000001",
+                        "password": "other-password",
+                    }
+                }
+            ]
+        }
+
+        with self.assertRaises(TydomClientApiClientAuthenticationError):
+            gateway_password_for_mac(payload, "001A2505F4B1")
+
+    def test_digest_challenge_retains_all_server_parameters(self) -> None:
+        """Newer mediation challenges may require more than their nonce."""
+        challenge = parse_digest_challenge(
+            'Digest realm="ServiceMedia", nonce="abc/123==", '
+            'qop="auth", algorithm="MD5", opaque="gateway-token"'
+        )
+
+        self.assertEqual(
+            challenge,
+            {
+                "realm": "ServiceMedia",
+                "nonce": "abc/123==",
+                "qop": "auth",
+                "algorithm": "MD5",
+                "opaque": "gateway-token",
+            },
+        )
+
+    def test_digest_header_uses_complete_challenge(self) -> None:
+        """The generated authorization must use every advertised parameter."""
+        digest_auth = MagicMock()
+        digest_auth.build_digest_header.return_value = "Digest response"
+        client = TydomClient(
+            None,
+            "test",
+            "001A2505F4B1",
+            "gateway-password",
+        )
+        header = (
+            'Digest realm="ServiceMedia", nonce="nonce", qop="auth", '
+            'algorithm="MD5", opaque="opaque"'
+        )
+
+        with patch.object(
+            client_module,
+            "HTTPDigestAuth",
+            return_value=digest_auth,
+        ):
+            authorization = client.build_digest_headers(header)
+
+        self.assertEqual(authorization, "Digest response")
+        self.assertEqual(
+            digest_auth._thread_local.chal,
+            parse_digest_challenge(header),
+        )
+        digest_auth.build_digest_header.assert_called_once_with(
+            "GET",
+            "https://mediation.tydom.com:443/mediation/client?mac=001A2505F4B1&appli=1",
+        )
+
+    def test_non_digest_challenge_is_rejected(self) -> None:
+        """Unexpected authentication schemes must fail clearly."""
+        with self.assertRaises(TydomClientApiClientAuthenticationError):
+            parse_digest_challenge('Basic realm="ServiceMedia"')
 
 
 class TestManagedConnection(IsolatedAsyncioTestCase):
