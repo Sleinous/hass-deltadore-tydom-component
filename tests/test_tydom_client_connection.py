@@ -6,7 +6,7 @@ from pathlib import Path
 import sys
 import types
 from unittest import IsolatedAsyncioTestCase
-from unittest.mock import AsyncMock, MagicMock, call
+from unittest.mock import AsyncMock, MagicMock, call, patch
 
 _MISSING = object()
 _original_modules: dict[str, object] = {}
@@ -346,4 +346,67 @@ class TestDevicePolling(IsolatedAsyncioTestCase):
 
         client.get_poll_device_data.assert_awaited_once_with(
             "/devices/8/endpoints/8/data"
+        )
+
+
+class TestActiveDevicePolling(IsolatedAsyncioTestCase):
+    """Exercise bounded round-robin polling used while covers are moving."""
+
+    def _client(self) -> TydomClient:
+        return TydomClient(None, "test", "001122334455", "password", host="local")
+
+    async def test_active_device_is_polled_until_deadline(self) -> None:
+        """A moving cover is refreshed each cycle until its burst expires."""
+        client = self._client()
+        client.get_poll_device_data = AsyncMock()
+
+        with patch.object(client_module.time, "monotonic", return_value=100):
+            client.activate_device_polling(12, 34, duration=30)
+            await client.poll_devices_data_1s()
+            await client.poll_devices_data_1s()
+
+        expected_url = "/devices/12/endpoints/34/data"
+        self.assertEqual(
+            client.get_poll_device_data.await_args_list,
+            [((expected_url,),), ((expected_url,),)],
+        )
+
+        with patch.object(client_module.time, "monotonic", return_value=131):
+            await client.poll_devices_data_1s()
+
+        self.assertEqual(client.get_poll_device_data.await_count, 2)
+        self.assertEqual(client._active_poll_device_deadlines, {})
+
+    async def test_active_devices_are_polled_round_robin(self) -> None:
+        """Group movement stays bounded to one gateway request per cycle."""
+        client = self._client()
+        client.get_poll_device_data = AsyncMock()
+
+        with patch.object(client_module.time, "monotonic", return_value=100):
+            client.activate_device_polling(1, 1)
+            client.activate_device_polling(2, 20)
+            await client.poll_devices_data_1s()
+            await client.poll_devices_data_1s()
+            await client.poll_devices_data_1s()
+
+        self.assertEqual(
+            [call.args[0] for call in client.get_poll_device_data.await_args_list],
+            [
+                "/devices/1/endpoints/1/data",
+                "/devices/2/endpoints/20/data",
+                "/devices/1/endpoints/1/data",
+            ],
+        )
+
+    async def test_stop_can_shorten_existing_poll_window(self) -> None:
+        """Replacing a deadline lets STOP end the polling burst promptly."""
+        client = self._client()
+
+        with patch.object(client_module.time, "monotonic", return_value=100):
+            client.activate_device_polling(1, 1, duration=30)
+            client.activate_device_polling(1, 1, duration=5)
+
+        self.assertEqual(
+            client._active_poll_device_deadlines["/devices/1/endpoints/1/data"],
+            105,
         )

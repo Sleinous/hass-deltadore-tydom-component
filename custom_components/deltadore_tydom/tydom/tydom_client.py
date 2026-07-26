@@ -145,6 +145,7 @@ class TydomClient:
         # Some devices (like Tywatt) need polling
         self.poll_device_urls_1s = []
         self.poll_device_urls_5m = []
+        self._active_poll_device_deadlines: dict[str, float] = {}
         self.current_poll_index = 0
         self.pending_pings = 0
 
@@ -1016,10 +1017,31 @@ class TydomClient:
         await self.send_message(method=req, msg=msg_type)
 
     async def poll_devices_data_1s(self):
-        """Poll devices data."""
+        """Poll one queued or actively moving device.
+
+        Active device polling is round-robin so a group command cannot create
+        an unbounded burst of requests to the gateway.
+        """
         if self.poll_device_urls_1s:
             url = self.poll_device_urls_1s.pop()
             await self.get_poll_device_data(url)
+            return
+
+        now = time.monotonic()
+        self._active_poll_device_deadlines = {
+            url: deadline
+            for url, deadline in self._active_poll_device_deadlines.items()
+            if deadline > now
+        }
+        if not self._active_poll_device_deadlines:
+            self.current_poll_index = 0
+            return
+
+        active_urls = list(self._active_poll_device_deadlines)
+        self.current_poll_index %= len(active_urls)
+        url = active_urls[self.current_poll_index]
+        self.current_poll_index = (self.current_poll_index + 1) % len(active_urls)
+        await self.get_poll_device_data(url)
 
     async def poll_devices_data_5m(self):
         """Poll devices data."""
@@ -1153,6 +1175,21 @@ class TydomClient:
         """Add a device for polling."""
         if url not in self.poll_device_urls_1s:
             self.poll_device_urls_1s.append(url)
+
+    def activate_device_polling(
+        self,
+        device_id: str | int,
+        endpoint_id: str | int | None,
+        duration: float = 30.0,
+    ) -> None:
+        """Temporarily poll a moving device for fresher state feedback."""
+        if self._shutting_down:
+            return
+        endpoint_id = endpoint_id if endpoint_id is not None else device_id
+        safe_device_id = quote(str(device_id), safe="")
+        safe_endpoint_id = quote(str(endpoint_id), safe="")
+        url = f"/devices/{safe_device_id}/endpoints/{safe_endpoint_id}/data"
+        self._active_poll_device_deadlines[url] = time.monotonic() + max(0, duration)
 
     def add_poll_device_url_5m(self, url):
         """Add a device for polling."""

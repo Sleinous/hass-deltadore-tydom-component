@@ -157,23 +157,37 @@ class Tydom(TydomDevice):
 class TydomShutter(TydomDevice):
     """Represents a shutter."""
 
+    _ACTIVE_POLL_DURATION = 30.0
+    _STOP_POLL_DURATION = 5.0
+
+    def _refresh_while_moving(self, duration: float = _ACTIVE_POLL_DURATION) -> None:
+        """Request short-lived polling while the shutter is moving."""
+        self._tydom_client.activate_device_polling(
+            self._id,
+            self._endpoint,
+            duration=duration,
+        )
+
     async def down(self) -> None:
         """Tell cover to go down."""
         await self._tydom_client.put_devices_data(
             self._id, self._endpoint, "positionCmd", "DOWN"
         )
+        self._refresh_while_moving()
 
     async def up(self) -> None:
         """Tell cover to go up."""
         await self._tydom_client.put_devices_data(
             self._id, self._endpoint, "positionCmd", "UP"
         )
+        self._refresh_while_moving()
 
     async def stop(self) -> None:
         """Tell cover to stop moving."""
         await self._tydom_client.put_devices_data(
             self._id, self._endpoint, "positionCmd", "STOP"
         )
+        self._refresh_while_moving(self._STOP_POLL_DURATION)
 
     async def set_position(self, position: int) -> None:
         """Set cover to the given position."""
@@ -187,6 +201,7 @@ class TydomShutter(TydomDevice):
         await self._tydom_client.put_devices_data(
             self._id, self._endpoint, "position", str(position)
         )
+        self._refresh_while_moving()
 
     # FIXME replace command
     async def slope_open(self) -> None:
