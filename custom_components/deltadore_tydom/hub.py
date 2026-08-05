@@ -305,10 +305,20 @@ class Hub:
                             stored_device.device_name != device.device_name
                             or stored_device.device_type != device.device_type
                         ):
+                            placeholder_group = (
+                                stored_device.device_type == "group"
+                                and device.device_type == "group"
+                                and stored_device.device_name
+                                == f"Group {device.device_id}"
+                            )
                             # Resolve collision: update stored device with new data
                             STRUCTURED_LOGGER.device_operation(
-                                "warning",
-                                "collision_resolved",
+                                "debug" if placeholder_group else "warning",
+                                (
+                                    "group_metadata_refreshed"
+                                    if placeholder_group
+                                    else "collision_resolved"
+                                ),
                                 device.device_id,
                                 stored_name=stored_device.device_name,
                                 stored_type=stored_device.device_type,

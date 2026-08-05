@@ -57,6 +57,9 @@ if TYPE_CHECKING:
 _MAX_REPLIES_SIZE = 5
 """Maximal number of replies to keep track of."""
 
+_ENDPOINT_ERROR_WARNING_MILESTONES = {3, 10, 30}
+"""Consecutive endpoint errors that should be promoted to warning."""
+
 _HISTO_END_INDEX = 255
 """Index value (0xFF) of the sentinel element closing an histo reply stream.
 
@@ -310,6 +313,15 @@ class Reply(TypedDict):
     """Whether all reply events have been received or not."""
 
 
+@dataclass
+class EndpointErrorState:
+    """Track one consecutive endpoint error incident."""
+
+    error: Any
+    occurrences: int
+    first_seen: float
+
+
 def _interrupter_model(tutorial_id: str) -> str:
     """Return a friendly wall-switch model from its tutorial identifier."""
     if tutorial_id.startswith("switch_tyxia2600"):
@@ -417,6 +429,66 @@ class MessageHandler:
         self._area_devices: dict[str, dict[str, AreaDeviceReference]] = {}
         self._area_data: dict[str, dict[str, Any]] = {}
         self._area_metadata: dict[str, dict] = {}
+        self._endpoint_errors: dict[tuple[Any, Any], EndpointErrorState] = {}
+
+    @staticmethod
+    def _is_endpoint_error_warning_milestone(occurrences: int) -> bool:
+        """Return whether a continuing endpoint error should emit a warning."""
+        return occurrences in _ENDPOINT_ERROR_WARNING_MILESTONES or (
+            occurrences > 30 and occurrences % 30 == 0
+        )
+
+    def _record_endpoint_error(
+        self,
+        device_id: Any,
+        endpoint_id: Any,
+        error: Any,
+        has_data: bool,
+    ) -> None:
+        """Record and rate-limit a non-zero endpoint error."""
+        key = (device_id, endpoint_id)
+        now = time.monotonic()
+        state = self._endpoint_errors.get(key)
+        if state is None or state.error != error:
+            state = EndpointErrorState(error=error, occurrences=1, first_seen=now)
+            self._endpoint_errors[key] = state
+        else:
+            state.occurrences += 1
+
+        duration = now - state.first_seen
+        should_warn = not has_data and state.occurrences == 1
+        should_warn = should_warn or self._is_endpoint_error_warning_milestone(
+            state.occurrences
+        )
+        # Keep every incident visible at INFO for diagnostics while reserving
+        # Home Assistant warning entries for missing data and milestones.
+        log = LOGGER.warning if should_warn else LOGGER.info
+        log(
+            "Endpoint error%s: device_id=%s, endpoint_id=%s, error=%s, "
+            "consecutive_occurrences=%s, duration=%.1fs; retaining previous state",
+            " persists" if state.occurrences > 1 else "",
+            device_id,
+            endpoint_id,
+            error,
+            state.occurrences,
+            duration,
+        )
+
+    def _clear_endpoint_error(self, device_id: Any, endpoint_id: Any) -> None:
+        """Reset a consecutive endpoint error incident after recovery."""
+        state = self._endpoint_errors.pop((device_id, endpoint_id), None)
+        if state is None:
+            return
+
+        LOGGER.info(
+            "Endpoint recovered: device_id=%s, endpoint_id=%s, previous_error=%s, "
+            "consecutive_occurrences=%s, duration=%.1fs",
+            device_id,
+            endpoint_id,
+            state.error,
+            state.occurrences,
+            time.monotonic() - state.first_seen,
+        )
 
     def get_reply(self, transaction_id: str) -> Reply | None:
         """
@@ -1041,7 +1113,9 @@ class MessageHandler:
                 )
             case _:
                 LOGGER.info(
-                    "Unknown usage : %s for device_id %s, uid %s - creating generic sensor",
+                    "Unsupported Tydom usage '%s'; creating a generic sensor "
+                    "(device_id=%s, uid=%s). Report this usage if dedicated "
+                    "device support is missing.",
                     last_usage,
                     device_id,
                     uid,
@@ -1306,15 +1380,16 @@ class MessageHandler:
                     has_data = "data" in endpoint and len(endpoint.get("data", [])) > 0
 
                     if has_error:
-                        LOGGER.warning(
-                            "Endpoint avec erreur (création quand même) : "
-                            "device_id=%s, endpoint_id=%s, error=%s",
+                        self._record_endpoint_error(
                             device_id,
                             endpoint_id,
                             endpoint.get("error"),
+                            has_data,
                         )
+                    else:
+                        self._clear_endpoint_error(device_id, endpoint_id)
 
-                    if not has_data:
+                    if not has_data and not has_error:
                         LOGGER.warning(
                             "Endpoint sans données valides (création avec état par défaut) : "
                             "device_id=%s, endpoint_id=%s, name=%s",
@@ -1395,8 +1470,17 @@ class MessageHandler:
                                 "endpoint_id": endpoint_id,
                             }
                             if has_data and not has_error:
-                                LOGGER.info(
+                                LOGGER.debug(
                                     "Device update (id=%s, endpoint=%s, name=%s, type=%s)",
+                                    device_id,
+                                    endpoint_id,
+                                    name_of_id,
+                                    type_of_id,
+                                )
+                            elif has_error:
+                                LOGGER.debug(
+                                    "Device state retained after endpoint error "
+                                    "(id=%s, endpoint=%s, name=%s, type=%s)",
                                     device_id,
                                     endpoint_id,
                                     name_of_id,

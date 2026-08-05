@@ -3049,15 +3049,12 @@ class HaGate(CoverEntity, HAEntity):
 
     @property
     def is_closed(self) -> bool | None:
-        """Return if the window is closed."""
-        if hasattr(self._device, "openState"):
-            open_state = getattr(self._device, "openState", None)
-            return open_state == "LOCKED"
-        else:
-            LOGGER.warning(
-                "no attribute 'openState' for device %s", self._device.device_id
-            )
+        """Return whether the gate is closed, if its receiver reports a state."""
+        open_state = getattr(self._device, "openState", None)
+        if open_state is None:
+            # A capability-based gate can legitimately omit contact feedback.
             return None
+        return open_state == "LOCKED"
 
     async def async_open_cover(self, **kwargs: Any) -> None:
         """Open the gate."""

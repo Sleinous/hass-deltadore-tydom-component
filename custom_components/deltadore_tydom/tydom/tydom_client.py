@@ -3,6 +3,7 @@
 import asyncio
 import base64
 import json
+from logging import DEBUG
 import os
 import re
 import socket
@@ -615,10 +616,12 @@ class TydomClient:
                 )
                 incoming_bytes_str = incoming.encode("utf-8")
                 file_index += 1
-                sanitized_msg = sanitize_log_message(
-                    incoming_bytes_str.decode("utf-8", errors="replace"), self._password
-                )
-                LOGGER.info("Incomming message - message : %s", sanitized_msg)
+                if LOGGER.isEnabledFor(DEBUG):
+                    sanitized_msg = sanitize_log_message(
+                        incoming_bytes_str.decode("utf-8", errors="replace"),
+                        self._password,
+                    )
+                    LOGGER.debug("Incoming message - message: %s", sanitized_msg)
             else:
                 await asyncio.sleep(10)
                 return None
@@ -646,16 +649,19 @@ class TydomClient:
                 return None
 
             msg = await connection.receive()
-            # Masquer les informations sensibles dans les messages entrants
-            msg_data_str = (
-                msg.data.decode("utf-8", errors="replace")
-                if isinstance(msg.data, bytes)
-                else str(msg.data)
-            )
-            sanitized_msg = sanitize_log_message(msg_data_str, self._password)
-            LOGGER.info(
-                "Incoming message - type : %s - message : %s", msg.type, sanitized_msg
-            )
+            if LOGGER.isEnabledFor(DEBUG):
+                # Decode and sanitise payloads only when they will be logged.
+                msg_data_str = (
+                    msg.data.decode("utf-8", errors="replace")
+                    if isinstance(msg.data, bytes)
+                    else str(msg.data)
+                )
+                sanitized_msg = sanitize_log_message(msg_data_str, self._password)
+                LOGGER.debug(
+                    "Incoming message - type: %s - message: %s",
+                    msg.type,
+                    sanitized_msg,
+                )
 
             if (
                 msg.type == WSMsgType.CLOSE

@@ -5,8 +5,9 @@ import importlib.util
 from pathlib import Path
 import sys
 import types
+from types import SimpleNamespace
 from unittest import IsolatedAsyncioTestCase
-from unittest.mock import AsyncMock, MagicMock, call
+from unittest.mock import AsyncMock, MagicMock, call, patch
 
 _MISSING = object()
 _original_modules: dict[str, object] = {}
@@ -516,6 +517,35 @@ class TestManagedConnection(IsolatedAsyncioTestCase):
 
         client._reconnect_with_backoff.assert_awaited_once()
         replacement.send_bytes.assert_awaited_once_with(b"request")
+
+    async def test_message_payload_is_not_sanitised_when_debug_is_disabled(
+        self,
+    ) -> None:
+        """Routine traffic avoids decoding and sanitising unused debug payloads."""
+        client = self._client()
+        connection = _websocket()
+        connection.receive = AsyncMock(
+            return_value=SimpleNamespace(
+                type=object(),
+                data=b"HTTP/1.1 200 OK\r\n\r\n",
+            )
+        )
+        client._connection = connection
+        client._connection_ready = True
+        client._message_handler.route_response = AsyncMock(return_value=[])
+        logger.isEnabledFor.return_value = False
+
+        try:
+            with patch.object(client_module, "sanitize_log_message") as sanitise:
+                result = await client.consume_messages()
+        finally:
+            logger.isEnabledFor.return_value = True
+
+        self.assertEqual(result, [])
+        sanitise.assert_not_called()
+        client._message_handler.route_response.assert_awaited_once_with(
+            b"HTTP/1.1 200 OK\r\n\r\n"
+        )
 
 
 class TestDevicePolling(IsolatedAsyncioTestCase):
