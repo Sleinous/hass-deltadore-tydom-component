@@ -56,6 +56,67 @@ PLATFORMS: list[str] = [
 async def async_setup(hass: HomeAssistant, config: dict) -> bool:
     """Set up the Delta Dore Tydom integration."""
 
+    async def handle_set_local_gateway_password(call):
+        """Change the local Digest password of one directly connected gateway."""
+        entry_id = call.data["config_entry_id"]
+        password = call.data["new_password"]
+
+        if not call.data["confirm"]:
+            raise HomeAssistantError(
+                "Set confirm to true before changing a gateway password"
+            )
+        if (
+            len(password) < 8
+            or not any(char.isalpha() for char in password)
+            or not any(char.isdigit() for char in password)
+        ):
+            raise HomeAssistantError(
+                "The new gateway password must have at least 8 characters, "
+                "including one letter and one digit"
+            )
+
+        tydom_hub = hass.data.get(DOMAIN, {}).get(entry_id)
+        if tydom_hub is None:
+            raise HomeAssistantError(
+                "The selected Delta Dore TYDOM configuration entry is not loaded"
+            )
+
+        try:
+            await tydom_hub.async_set_local_gateway_password(password)
+        except Exception as err:
+            # Never include the password in an exception or log record.
+            raise HomeAssistantError(
+                "The gateway did not accept a local password change. "
+                "It may not support this endpoint or it may require a direct local connection."
+            ) from err
+
+        entry = hass.config_entries.async_get_entry(entry_id)
+        if entry is None:
+            raise HomeAssistantError(
+                "The selected Delta Dore TYDOM configuration entry no longer exists"
+            )
+
+        updated_data = dict(entry.data)
+        updated_data[CONF_TYDOM_PASSWORD] = password
+        hass.config_entries.async_update_entry(entry, data=updated_data)
+        LOGGER.info(
+            "Updated local gateway password for configuration entry %s", entry_id
+        )
+        return {"config_entry_id": entry_id, "updated": True}
+
+    hass.services.async_register(
+        DOMAIN,
+        "set_local_gateway_password",
+        handle_set_local_gateway_password,
+        schema=vol.Schema(
+            {
+                vol.Required("config_entry_id"): cv.string,
+                vol.Required("new_password"): cv.string,
+                vol.Required("confirm"): cv.boolean,
+            }
+        ),
+    )
+
     def get_tydom_device(entity_id: str):
         """Return the TYDOM device represented by an integration entity."""
         for tydom_hub in hass.data.get(DOMAIN, {}).values():
