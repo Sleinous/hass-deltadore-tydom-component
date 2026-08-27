@@ -63,6 +63,9 @@ Platform | Description
 - Keep Tywell wall-controller sensors, area-backed climate control and
   companion weather or shutter controls attached to the same physical device
   across the different endpoint layouts advertised by TYDOM.
+- Preserve Calybox 1020 WT consumption endpoints even when their regular-data
+  response is temporarily empty, so their later energy values remain available
+  without repeated warning noise.
 - Expose alarm modes and zones, event history and acknowledgement, the actor
   behind the latest alarm state change, and the exact products reported by the
   alarm central as currently preventing normal arming. It also provides
@@ -79,8 +82,8 @@ contributors; this is not an exhaustive compatibility list.
 Category | Confirmed hardware or configuration | Home Assistant support
 -- | -- | --
 Alarm and safety | TYXAL+, CS8000, CSX40 and DFR TYXAL+ smoke detectors | Alarm control, zone modes, diagnostics, smoke state, event history, acknowledgement, exact central-reported arming blockers, and supported remote product/zone management.
-Climate and heating | Tybox 5101 with Typass ATL, Tywell Control, Tywell 2050, TYXIA 1137, Calybox and RF 6600 FP | Area-backed climate control, temperatures, heating and cooling setpoints, operating modes, humidity, battery and capability-driven heating or pilot-wire commands where advertised.
-Energy monitoring | TYWATT 1000, TYWATT 2000 and TYWATT 5400 with EMIC | Power, current and energy measurements, including heating, domestic hot water and cooling channels where advertised.
+Climate and heating | Tybox 5101 with Typass ATL, Tywell Control, Tywell 2050, TYXIA 1137, Calybox 1020 WT and RF 6600 FP | Area-backed climate control, temperatures, heating and cooling setpoints, operating modes, humidity, battery and capability-driven heating or pilot-wire commands where advertised.
+Energy monitoring | TYWATT 1000, TYWATT 2000 and TYWATT 5400 with EMIC, and Calybox 1020 WT | Power, current and energy measurements, including heating, domestic hot water and cooling channels where advertised; Calybox consumption values are retained when supplied through its dedicated endpoint.
 Gates and garage doors | TYXIA 4620 dry-contact receivers | Stateless toggle buttons matching the receiver's open/stop/close pulse sequence, without claiming unavailable position feedback.
 Lighting and switching | TYXIA 4910 fixed-output and TYXIA 4940 dimming receivers configured under TYDOM's `Others` usage, TYXIA 6610, Delta Dore Easy Plug and compatible X3D equipment | Lights, brightness, switches and plugs according to the capabilities reported by the endpoint.
 Openings and covers | TYMOOV and Well'com roller shutters, BSO installations, Profalux `MOT-C1Z06F` and `MOT-C1Z10F` Zigbee shutters, TYXIA 5731 awnings, K-Line DVI openings and K-Line POD doors | Native covers with up, down, stop and position control where advertised; awning commands and positions are translated into Home Assistant open/close semantics; opening/contact state is exposed when feedback is supplied.
