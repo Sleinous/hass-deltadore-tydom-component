@@ -67,10 +67,11 @@ Plateforme | Description
   commandes météo ou volets associées sur le même appareil physique, quelle
   que soit la disposition des points de terminaison annoncée par TYDOM.
 - Expose les modes et zones d'alarme, l'historique et l'acquittement des
-  événements, l'auteur de la dernière transition d'état, les opérations de
-  maintenance à distance et d'armement forcé confirmées, ainsi que les
-  événements d'automatisation natifs des interrupteurs et télécommandes
-  compatibles.
+  événements, l'auteur de la dernière transition d'état, ainsi que les
+  produits exacts signalés par la centrale comme empêchant actuellement un
+  armement normal. Fournit également les opérations de maintenance à distance
+  et d'armement forcé confirmées, ainsi que les événements d'automatisation
+  natifs des interrupteurs et télécommandes compatibles.
 
 ### Matériel testé
 
@@ -82,7 +83,7 @@ liste de compatibilité n'est pas exhaustive.
 
 Catégorie | Matériel ou configuration confirmés | Prise en charge dans Home Assistant
 -- | -- | --
-Alarme et sécurité | TYXAL+, CS8000, CSX40 et détecteurs de fumée DFR TYXAL+ | Pilotage de l'alarme, modes par zone, diagnostics, état de détection de fumée, historique et acquittement des événements, ainsi que la gestion à distance des produits et zones compatibles.
+Alarme et sécurité | TYXAL+, CS8000, CSX40 et détecteurs de fumée DFR TYXAL+ | Pilotage de l'alarme, modes par zone, diagnostics, état de détection de fumée, historique et acquittement des événements, produits empêchant l'armement signalés par la centrale, ainsi que gestion à distance des produits et zones compatibles.
 Chauffage et régulation | Tybox 5101 avec Typass ATL, Tywell Control, Tywell 2050, TYXIA 1137, Calybox et RF 6600 FP | Régulation par zone, températures, consignes de chauffage et de refroidissement, modes de fonctionnement, humidité, batterie et commandes de chauffage ou de fil pilote annoncées par l'appareil.
 Suivi énergétique | TYWATT 1000, TYWATT 2000 et TYWATT 5400 avec EMIC | Mesures de puissance, courant et énergie, y compris les canaux de chauffage, d'eau chaude sanitaire et de refroidissement lorsqu'ils sont annoncés.
 Portails et portes de garage | Récepteurs à contact sec TYXIA 4620 | Boutons impulsionnels reproduisant la séquence ouverture/arrêt/fermeture du récepteur, sans prétendre connaître une position qui n'est pas remontée.
@@ -283,6 +284,8 @@ TYXAL+ utiles dans Home Assistant :
 - `deltadore_tydom.get_events` renvoie l'historique et permet de le filtrer sur
   les alarmes, les activations/désactivations ou les événements non acquittés ;
 - `deltadore_tydom.acknowledge_events` acquitte les événements en attente ;
+- `deltadore_tydom.get_open_issues` renvoie les produits exacts signalés par la
+  centrale comme empêchant actuellement un armement normal ;
 - `deltadore_tydom.force_arm` arme explicitement un mode Absent, Présent ou
   Nuit configuré lorsqu'un armement normal a été refusé en raison de défauts ;
 - `deltadore_tydom.get_alarm_products` répertorie les produits et zones
@@ -314,6 +317,16 @@ déterminé qu'un armement forcé est approprié.
 L'appareil d'alarme TYXAL fournit également un bouton **Acquitter les
 événements** utilisable directement dans un tableau de bord, sans appel de
 service ni automatisation.
+
+Lorsque la centrale signale un défaut ouvert, l'entité d'alarme actualise
+automatiquement son détail et expose `open_issue_count` et `open_issues`.
+Chaque élément conserve le nom, l'identifiant, le type, la zone et les défauts
+du produit signalés par la centrale. Cette dernière reste la source de vérité
+en cas de refus d'armement : cette information n'est pas déduite des capteurs
+de contact Home Assistant. Utilisez `deltadore_tydom.get_open_issues` pour une
+consultation à la demande ; l'action prend en charge tous les produits
+compatibles remontés par la centrale, y compris les contacts de fenêtre MDO et
+les contacts de porte MO.
 
 Lorsque TYDOM transmet l'auteur d'une transition d'alarme, l'entité d'alarme
 expose `changed_by`, contenant le nom du code utilisateur ou du produit, ainsi

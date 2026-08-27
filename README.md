@@ -64,9 +64,10 @@ Platform | Description
   companion weather or shutter controls attached to the same physical device
   across the different endpoint layouts advertised by TYDOM.
 - Expose alarm modes and zones, event history and acknowledgement, the actor
-  behind the latest alarm state change, supported remote maintenance and
-  forced-arming operations, and native automation events from compatible wall
-  switches and remote controls.
+  behind the latest alarm state change, and the exact products reported by the
+  alarm central as currently preventing normal arming. It also provides
+  supported remote maintenance and forced-arming operations, plus native
+  automation events from compatible wall switches and remote controls.
 
 ### Tested hardware
 
@@ -77,7 +78,7 @@ contributors; this is not an exhaustive compatibility list.
 
 Category | Confirmed hardware or configuration | Home Assistant support
 -- | -- | --
-Alarm and safety | TYXAL+, CS8000, CSX40 and DFR TYXAL+ smoke detectors | Alarm control, zone modes, diagnostics, smoke state, event history, acknowledgement and supported remote product/zone management.
+Alarm and safety | TYXAL+, CS8000, CSX40 and DFR TYXAL+ smoke detectors | Alarm control, zone modes, diagnostics, smoke state, event history, acknowledgement, exact central-reported arming blockers, and supported remote product/zone management.
 Climate and heating | Tybox 5101 with Typass ATL, Tywell Control, Tywell 2050, TYXIA 1137, Calybox and RF 6600 FP | Area-backed climate control, temperatures, heating and cooling setpoints, operating modes, humidity, battery and capability-driven heating or pilot-wire commands where advertised.
 Energy monitoring | TYWATT 1000, TYWATT 2000 and TYWATT 5400 with EMIC | Power, current and energy measurements, including heating, domestic hot water and cooling channels where advertised.
 Gates and garage doors | TYXIA 4620 dry-contact receivers | Stateless toggle buttons matching the receiver's open/stop/close pulse sequence, without claiming unavailable position feedback.
@@ -262,6 +263,8 @@ useful in Home Assistant:
 - `deltadore_tydom.get_events` returns alarm history and can filter it to alarm,
   activation/deactivation or unacknowledged events;
 - `deltadore_tydom.acknowledge_events` acknowledges pending alarm events;
+- `deltadore_tydom.get_open_issues` returns the exact products currently
+  reported by the alarm central as preventing normal arming;
 - `deltadore_tydom.force_arm` explicitly arms a configured Away, Home or Night
   mode when normal arming was refused because of defects;
 - `deltadore_tydom.get_alarm_products` lists configured products and zones;
@@ -290,6 +293,14 @@ appropriate.
 
 The TYXAL alarm device also provides an **Acknowledge events** button for
 convenient dashboard use without requiring a service call or automation.
+
+When the central reports an open issue, the alarm entity automatically refreshes
+its details and exposes `open_issue_count` and `open_issues`. Each entry retains
+the product name, identifier, type, zone and defects reported by the central.
+This is the source of truth for an arming refusal: it is not inferred from Home
+Assistant contact sensors. Use `deltadore_tydom.get_open_issues` for an
+on-demand lookup; it supports all compatible products returned by the central,
+including MDO window contacts and MO door contacts.
 
 When TYDOM reports the actor for an alarm transition, the alarm entity exposes
 `changed_by` with the user-code or product name and `changed_by_type` with
