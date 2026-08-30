@@ -3492,9 +3492,7 @@ class HaAlarm(AlarmControlPanelEntity, HAEntity):
         self._last_alarm_state = self.alarm_state
         self._last_alarm_event_sequence = self._device.alarm_event_sequence
         self._pending_alarm_actor: tuple[str, str, str] | None = None
-        self._last_open_issue_state = bool(getattr(device, "systOpenIssue", False))
         self._open_issues_refresh_task = None
-        self._open_issues_history_supported = True
 
         self._attr_supported_features = (
             self._attr_supported_features
@@ -3509,10 +3507,6 @@ class HaAlarm(AlarmControlPanelEntity, HAEntity):
         await super().async_added_to_hass()
         self._device.register_callback(self._handle_alarm_update)
         self._device._ha_device = self
-        if self._last_open_issue_state:
-            self._schedule_open_issues_refresh()
-        else:
-            self._device.clear_open_issues()
 
     async def async_will_remove_from_hass(self) -> None:
         """Remove the push callback registered in async_added_to_hass."""
@@ -3525,16 +3519,6 @@ class HaAlarm(AlarmControlPanelEntity, HAEntity):
 
     def _handle_alarm_update(self) -> None:
         """Publish alarm pushes and associate spontaneous actors with transitions."""
-        has_open_issue = bool(getattr(self._device, "systOpenIssue", False))
-        should_refresh_open_issues = has_open_issue and (
-            not self._last_open_issue_state or self._device.open_issues is None
-        )
-        self._last_open_issue_state = has_open_issue
-        if not has_open_issue:
-            self._device.clear_open_issues()
-        elif should_refresh_open_issues:
-            self._schedule_open_issues_refresh()
-
         current_state = self.alarm_state
         previous_state = self._last_alarm_state
         self._last_alarm_state = current_state
@@ -3579,26 +3563,25 @@ class HaAlarm(AlarmControlPanelEntity, HAEntity):
         self.async_write_ha_state()
 
     def _schedule_open_issues_refresh(self) -> None:
-        """Fetch central-reported arming blockers without delaying a push."""
-        if self._open_issues_history_supported and (
+        """Fetch the central-reported blockers after a refused arm command."""
+        if (
             self._open_issues_refresh_task is None
             or self._open_issues_refresh_task.done()
         ):
             self._open_issues_refresh_task = self.hass.async_create_task(
-                self._async_refresh_open_issues(), "Refresh TYXAL open alarm issues"
+                self._async_refresh_open_issues(),
+                "Refresh TYXAL open issues after refused arming",
             )
 
     async def _async_refresh_open_issues(self) -> None:
-        """Refresh issue details for this alarm entity only."""
+        """Refresh issue details after the alarm central refused arming."""
         try:
             await self._device.get_open_issues(
                 timeout=_AUTOMATIC_ALARM_HISTORY_TIMEOUT, log_timeout=False
             )
         except Exception:
-            self._open_issues_history_supported = False
             LOGGER.debug(
-                "Detailed open-issue history is unavailable for %s; automatic "
-                "refresh disabled until the integration is reloaded",
+                "Unable to retrieve detailed open issues after refused arming for %s",
                 self._device.device_id,
                 exc_info=True,
             )
@@ -3719,6 +3702,8 @@ class HaAlarm(AlarmControlPanelEntity, HAEntity):
             await command
         except TydomAlarmCommandError as err:
             if err.result == "DENIED":
+                if operation == "arming":
+                    self._schedule_open_issues_refresh()
                 raise HomeAssistantError(
                     f"The alarm system refused {operation}. Check the reported "
                     "defects before trying again."
@@ -3726,6 +3711,9 @@ class HaAlarm(AlarmControlPanelEntity, HAEntity):
             raise HomeAssistantError(
                 f"The alarm system rejected {operation} ({err.result})."
             ) from err
+        if operation == "arming":
+            self._device.clear_open_issues()
+            self.async_write_ha_state()
 
     async def async_force_arm(self, code: str, mode: str) -> None:
         """Force arming only after an explicit Home Assistant action."""
