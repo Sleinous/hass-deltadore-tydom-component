@@ -117,9 +117,7 @@ class EndpointLoggingTests(IsolatedAsyncioTestCase):
         uid = "10_20"
         handler_module.device_name[uid] = "Bedrooms"
         handler_module.device_type[uid] = "boiler"
-        handler_module.device_metadata[uid] = {
-            "thermicLevel": {"permission": "rw"}
-        }
+        handler_module.device_metadata[uid] = {"thermicLevel": {"permission": "rw"}}
 
         for _ in range(12):
             await self.handler.parse_devices_data(self._response(), None)
@@ -132,9 +130,7 @@ class EndpointLoggingTests(IsolatedAsyncioTestCase):
         uid = "10_20"
         handler_module.device_name[uid] = "Bedrooms"
         handler_module.device_type[uid] = "boiler"
-        handler_module.device_metadata[uid] = {
-            "thermicLevel": {"permission": "rw"}
-        }
+        handler_module.device_metadata[uid] = {"thermicLevel": {"permission": "rw"}}
 
         await self.handler.parse_devices_data(self._response(error=5), None)
 
@@ -147,9 +143,7 @@ class EndpointLoggingTests(IsolatedAsyncioTestCase):
         uid = "10_20"
         handler_module.device_name[uid] = "Bedrooms"
         handler_module.device_type[uid] = "boiler"
-        handler_module.device_metadata[uid] = {
-            "thermicLevel": {"permission": "rw"}
-        }
+        handler_module.device_metadata[uid] = {"thermicLevel": {"permission": "rw"}}
 
         await self.handler.parse_devices_data(self._response(error=1), None)
         await self.handler.parse_devices_data(self._response(error=5), None)
