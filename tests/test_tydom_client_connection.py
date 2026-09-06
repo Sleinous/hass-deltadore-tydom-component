@@ -1,12 +1,13 @@
 """Tests for serialised Tydom websocket connection ownership."""
 
 import asyncio
+from contextlib import asynccontextmanager
 import importlib.util
 from pathlib import Path
 import sys
 import types
 from unittest import IsolatedAsyncioTestCase
-from unittest.mock import AsyncMock, MagicMock, call
+from unittest.mock import AsyncMock, MagicMock, call, patch
 
 _MISSING = object()
 _original_modules: dict[str, object] = {}
@@ -133,6 +134,91 @@ def _websocket() -> MagicMock:
     connection.close = AsyncMock(side_effect=close)
     connection.send_bytes = AsyncMock()
     return connection
+
+
+@asynccontextmanager
+async def _no_timeout(_duration):
+    """Provide a real async timeout context for isolated pairing tests."""
+    yield
+
+
+class TestLocalPasswordPairing(IsolatedAsyncioTestCase):
+    """Exercise the parser used by explicit physical-button pairing."""
+
+    def test_extracts_password_from_chunked_gateway_response(self) -> None:
+        """The local-password response may use TYDOM HTTP chunk framing."""
+        payload = b'{"current":"local-secret"}'
+        frame = (
+            b"HTTP/1.1 200 OK\r\n"
+            b"Uri-Origin: /configs/gateway/password\r\n"
+            b"Content-Type: application/json\r\n"
+            b"Transfer-Encoding: chunked\r\n\r\n"
+            + f"{len(payload):X}\r\n".encode()
+            + payload
+            + b"\r\n0\r\n\r\n"
+        )
+
+        assert TydomClient._extract_local_gateway_password(frame) == "local-secret"
+
+    def test_ignores_unrelated_gateway_event(self) -> None:
+        """Unsolicited state events must not be mistaken for credentials."""
+        frame = (
+            b"PUT /devices/data HTTP/1.1\r\n"
+            b"Content-Type: application/json\r\n"
+            b"Content-Length: 26\r\n\r\n"
+            b'{"current":"not-a-password"}'
+        )
+
+        assert TydomClient._extract_local_gateway_password(frame) is None
+
+    def test_rejects_incomplete_chunked_response(self) -> None:
+        """A fragmented response is retained for a later websocket message."""
+        frame = (
+            b"HTTP/1.1 200 OK\r\n"
+            b"Uri-Origin: /configs/gateway/password\r\n"
+            b"Transfer-Encoding: chunked\r\n\r\n"
+            b'1A\r\n{"current":"local-secret"}'
+        )
+
+        assert TydomClient._extract_local_gateway_password(frame) is None
+
+    async def test_reads_password_only_from_button_gated_socket(self) -> None:
+        """Pairing opens one unauthenticated socket and closes it afterwards."""
+        payload = b'{"current":"local-secret"}'
+        frame = (
+            b"HTTP/1.1 200 OK\r\n"
+            b"Uri-Origin: /configs/gateway/password\r\n"
+            b"Content-Type: application/json\r\n"
+            b"Content-Length: " + str(len(payload)).encode() + b"\r\n\r\n" + payload
+        )
+        connection = _websocket()
+        connection.receive = AsyncMock(
+            return_value=MagicMock(type=client_module.WSMsgType.BINARY, data=frame)
+        )
+        session = MagicMock()
+        session.ws_connect = AsyncMock(return_value=connection)
+
+        with (
+            patch.object(
+                client_module,
+                "async_create_clientsession",
+                return_value=session,
+            ),
+            patch.object(client_module.async_timeout, "timeout", _no_timeout),
+        ):
+            password = await TydomClient.async_read_local_gateway_password(
+                None, "local", "001122334455"
+            )
+
+        assert password == "local-secret"
+        assert "Authorization" not in session.ws_connect.await_args.kwargs["headers"]
+        connection.send_bytes.assert_awaited_once_with(
+            b"GET /configs/gateway/password HTTP/1.1\r\n"
+            b"Content-Length: 0\r\n"
+            b"Content-Type: application/json; charset=UTF-8\r\n"
+            b"Transac-Id: 0\r\n\r\n"
+        )
+        connection.close.assert_awaited_once()
 
 
 class TestManagedConnection(IsolatedAsyncioTestCase):
@@ -380,15 +466,12 @@ class TestManagedConnection(IsolatedAsyncioTestCase):
         """A negative asynchronous result must reach the service caller."""
         client = self._client()
         waiter = asyncio.get_running_loop().create_future()
-        waiter.set_result(
-            {"name": "ackEventCmd", "values": {"result": "DENIED"}}
-        )
+        waiter.set_result({"name": "ackEventCmd", "values": {"result": "DENIED"}})
         client._message_handler.create_alarm_command_waiter.return_value = waiter
         client.send_bytes = AsyncMock()
 
         with self.assertRaises(TydomAlarmCommandError):
             await client.put_ackevents_cdata("20", "10", "123456")
-
 
     async def test_alarm_remote_configuration_lock_uses_official_command(self) -> None:
         """Remote TYXAL configuration must be explicitly locked and unlocked."""

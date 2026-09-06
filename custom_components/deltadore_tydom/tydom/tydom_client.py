@@ -99,7 +99,15 @@ class TydomClientApiClientAuthenticationError(TydomClientApiClientError):
     """Exception to indicate an authentication error."""
 
 
+class TydomLocalPasswordPairingError(TydomClientApiClientError):
+    """The physical-button local-password pairing did not complete."""
+
+
 proxy = None
+
+_LOCAL_PASSWORD_URI = "/configs/gateway/password"
+_LOCAL_PASSWORD_MAX_MESSAGES = 5
+_LOCAL_PASSWORD_MAX_RESPONSE_BYTES = 64 * 1024
 
 # DEBUG ONLY — replaces websocket with a local trace file
 file_mode = False
@@ -281,6 +289,150 @@ class TydomClient:
             raise TydomClientApiClientError(
                 "Something really wrong happened!"
             ) from exception
+
+    @staticmethod
+    def _extract_local_gateway_password(message: bytes) -> str | None:
+        """Extract a paired gateway password from one TYDOM HTTP response.
+
+        The button-gated websocket can also carry ordinary gateway events.  A
+        response is accepted only when it is for the password resource, and
+        its JSON body contains a non-empty ``current`` value.  The caller must
+        never log the returned value.
+        """
+        header_bytes, separator, body = message.partition(b"\r\n\r\n")
+        if not separator:
+            return None
+
+        header_text = header_bytes.decode("latin-1", errors="replace")
+        if _LOCAL_PASSWORD_URI not in header_text:
+            return None
+
+        headers = {
+            name.strip().lower(): value.strip()
+            for line in header_text.split("\r\n")[1:]
+            if ":" in line
+            for name, value in [line.split(":", 1)]
+        }
+        payload = body
+        if "chunked" in headers.get("transfer-encoding", "").lower():
+            chunks = bytearray()
+            cursor = 0
+            while True:
+                line_end = body.find(b"\r\n", cursor)
+                if line_end < 0:
+                    return None
+                try:
+                    chunk_size = int(body[cursor:line_end], 16)
+                except ValueError:
+                    return None
+                cursor = line_end + 2
+                if len(body) < cursor + chunk_size + 2:
+                    return None
+                if chunk_size == 0:
+                    payload = bytes(chunks)
+                    break
+                chunks.extend(body[cursor : cursor + chunk_size])
+                cursor += chunk_size
+                if body[cursor : cursor + 2] != b"\r\n":
+                    return None
+                cursor += 2
+        elif "content-length" in headers:
+            try:
+                payload = body[: int(headers["content-length"])]
+            except ValueError:
+                return None
+
+        try:
+            current = json.loads(payload.decode("utf-8"))["current"]
+        except (UnicodeDecodeError, json.JSONDecodeError, KeyError, TypeError):
+            return None
+        return current if isinstance(current, str) and current else None
+
+    @classmethod
+    async def async_read_local_gateway_password(cls, hass, host: str, mac: str) -> str:
+        """Read a gateway's local password during its physical pairing window.
+
+        TYDOM opens this unauthenticated websocket route only briefly after a
+        physical press on the gateway.  This method is deliberately called
+        only by the explicit setup flow; it never probes or retries in the
+        background.
+        """
+        if host == MEDIATION_URL:
+            raise TydomLocalPasswordPairingError(
+                "Local button pairing requires the gateway's local host"
+            )
+
+        sslcontext = await asyncio.to_thread(ssl.create_default_context)
+        sslcontext.options |= 0x4  # OP_LEGACY_SERVER_CONNECT
+        sslcontext.check_hostname = False
+        sslcontext.verify_mode = ssl.CERT_NONE
+        session = async_create_clientsession(hass, False)
+        connection = None
+
+        try:
+            async with async_timeout.timeout(TIMEOUT_NORMAL_REQUEST):
+                connection = await session.ws_connect(
+                    method="GET",
+                    url=(f"wss://{host}:443/mediation/client?mac={mac}&appli=1"),
+                    headers={"Sec-WebSocket-Version": "13"},
+                    autoping=True,
+                    heartbeat=2.0,
+                    timeout=TIMEOUT_WEBSOCKET_CONNECT,  # type: ignore[arg-type]
+                    receive_timeout=TIMEOUT_WEBSOCKET_RECEIVE,
+                    autoclose=True,
+                    proxy=proxy,
+                    ssl=sslcontext,
+                )
+                request = (
+                    f"GET {_LOCAL_PASSWORD_URI} HTTP/1.1\r\n"
+                    "Content-Length: 0\r\n"
+                    "Content-Type: application/json; charset=UTF-8\r\n"
+                    "Transac-Id: 0\r\n\r\n"
+                )
+                await connection.send_bytes(request.encode("ascii"))
+
+                response = bytearray()
+                for _ in range(_LOCAL_PASSWORD_MAX_MESSAGES):
+                    message = await connection.receive()
+                    if message.type == WSMsgType.TEXT:
+                        raw_message = message.data.encode("utf-8")
+                    elif message.type == WSMsgType.BINARY:
+                        raw_message = bytes(message.data)
+                    else:
+                        continue
+
+                    password = cls._extract_local_gateway_password(raw_message)
+                    if password is not None:
+                        return password
+
+                    # A response can be split across websocket messages, but
+                    # unrelated gateway events must never become part of the
+                    # password-response buffer.
+                    if _LOCAL_PASSWORD_URI in raw_message.decode(
+                        "latin-1", errors="ignore"
+                    ):
+                        response = bytearray(raw_message)
+                    elif response:
+                        response.extend(raw_message)
+                    else:
+                        continue
+
+                    if len(response) > _LOCAL_PASSWORD_MAX_RESPONSE_BYTES:
+                        break
+                    password = cls._extract_local_gateway_password(bytes(response))
+                    if password is not None:
+                        return password
+        except (TimeoutError, aiohttp.ClientError, socket.gaierror) as err:
+            raise TydomLocalPasswordPairingError(
+                "The local button pairing window is not available"
+            ) from err
+        finally:
+            if connection is not None:
+                await connection.close()
+
+        raise TydomLocalPasswordPairingError(
+            "The gateway did not return a local password during the pairing window"
+        )
 
     async def async_connect(self) -> ClientWebSocketResponse:
         """Connect to the Tydom API."""
