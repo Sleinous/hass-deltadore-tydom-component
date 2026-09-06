@@ -25,7 +25,7 @@
             },
             "user_local_pair": {
                 "title": "Pair Delta Dore Tydom locally",
-                "description": "Use this only for a local gateway when its password is unknown. Enter the gateway's local host and MAC address, press its physical button, then submit this form promptly. The temporary pairing window is used once to retrieve the local password; the password itself is never shown or logged.",
+                "description": "Use this only for a local gateway when its password is unknown. Complete all fields first. As the final step, press the gateway's physical button and immediately select Submit; do not edit the form between the button press and submission. The temporary pairing window is used once to retrieve the local password; the password itself is never shown or logged.",
                 "data": {
                     "host": "Local Tydom gateway IP/hostname",
                     "mac": "MAC address (12 characters, no separators)",
@@ -75,7 +75,7 @@
             },
             "discovery_confirm_local_pair": {
                 "title": "Pair discovered Delta Dore Tydom locally",
-                "description": "A Tydom gateway was discovered ({name}). Use this only when its local password is unknown: press the gateway's physical button, then submit this form promptly. The temporary pairing window is used once to retrieve the local password; the password itself is never shown or logged.",
+                "description": "A Tydom gateway was discovered ({name}). Use this only when its local password is unknown. Complete all fields first. As the final step, press the gateway's physical button and immediately select Submit; do not edit the form between the button press and submission. The temporary pairing window is used once to retrieve the local password; the password itself is never shown or logged.",
                 "data": {
                     "host": "Local Tydom gateway IP/hostname",
                     "mac": "MAC address (12 characters, no separators)",
