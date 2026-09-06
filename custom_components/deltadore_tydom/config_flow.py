@@ -34,13 +34,16 @@ from .const import (
     CONF_REFRESH_INTERVAL,
     CONF_CONFIG_MODE,
     CONF_CLOUD_MODE,
+    CONF_LOCAL_BUTTON_MODE,
     CONF_MANUAL_MODE,
 )
 from . import hub
 from .tydom.tydom_client import (
+    TydomClient,
     TydomClientApiClientCommunicationError,
     TydomClientApiClientAuthenticationError,
     TydomClientApiClientError,
+    TydomLocalPasswordPairingError,
 )
 
 DATA_SCHEMA = vol.Schema(
@@ -112,6 +115,27 @@ def sanitize_config_data(data: dict[str, Any]) -> dict[str, Any]:
     if CONF_TYDOM_PASSWORD in sanitized and sanitized[CONF_TYDOM_PASSWORD]:
         sanitized[CONF_TYDOM_PASSWORD] = "***"
     return sanitized
+
+
+def validate_local_pairing_input(data: dict[str, Any]) -> None:
+    """Validate local-pairing fields before opening the button-gated socket."""
+    if not host_valid(data[CONF_HOST]):
+        raise InvalidHost
+    if not re.fullmatch(r"[0-9A-Fa-f]{12}", data[CONF_MAC]):
+        raise InvalidMacAddress
+    for zone, error in {
+        (CONF_ZONES_HOME, InvalidZoneHome),
+        (CONF_ZONES_AWAY, InvalidZoneAway),
+        (CONF_ZONES_NIGHT, InvalidZoneNight),
+    }:
+        if zone in data and not zones_valid(data[zone]):
+            raise error
+    if isinstance(data[CONF_REFRESH_INTERVAL], int):
+        data[CONF_REFRESH_INTERVAL] = str(data[CONF_REFRESH_INTERVAL])
+    try:
+        int(data[CONF_REFRESH_INTERVAL])
+    except (ValueError, TypeError) as err:
+        raise InvalidRefreshInterval from err
 
 
 async def validate_input(
@@ -216,6 +240,8 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         if user_input is not None:
             if user_input.get(CONF_CONFIG_MODE) == CONF_MANUAL_MODE:
                 return await self.async_step_user_manual()
+            if user_input.get(CONF_CONFIG_MODE) == CONF_LOCAL_BUTTON_MODE:
+                return await self.async_step_user_local_pair()
             else:
                 return await self.async_step_user_cloud()
         else:
@@ -235,6 +261,10 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                                     ),
                                     selector.SelectOptionDict(
                                         value=CONF_MANUAL_MODE, label=CONF_MANUAL_MODE
+                                    ),
+                                    selector.SelectOptionDict(
+                                        value=CONF_LOCAL_BUTTON_MODE,
+                                        label=CONF_LOCAL_BUTTON_MODE,
                                     ),
                                 ],
                                 translation_key=CONF_CONFIG_MODE,
@@ -424,6 +454,161 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 }
             ),
             errors=_errors,
+        )
+
+    async def async_step_user_local_pair(
+        self,
+        user_input=None,
+        *,
+        step_id: str = "user_local_pair",
+        default_host: str | None = None,
+        default_mac: str | None = None,
+        description_placeholders: dict[str, str] | None = None,
+    ) -> config_entries.FlowResult:
+        """Pair locally after an explicit physical press on the gateway."""
+        errors = {}
+        default_zone_home = ""
+        default_zone_away = ""
+        default_zone_night = ""
+
+        if user_input is not None:
+            default_zone_home = user_input.get(CONF_ZONES_HOME, "")
+            default_zone_away = user_input.get(CONF_ZONES_AWAY, "")
+            default_zone_night = user_input.get(CONF_ZONES_NIGHT, "")
+            try:
+                user_input = dict(user_input)
+                validate_local_pairing_input(user_input)
+                user_input[
+                    CONF_TYDOM_PASSWORD
+                ] = await TydomClient.async_read_local_gateway_password(
+                    self.hass,
+                    user_input[CONF_HOST],
+                    user_input[CONF_MAC],
+                )
+                user_input = await validate_input(self.hass, False, user_input)
+
+                tydom_hub = hub.Hub(
+                    self.hass,
+                    cast(ConfigEntry, None),
+                    user_input[CONF_HOST],
+                    user_input[CONF_MAC],
+                    user_input[CONF_TYDOM_PASSWORD],
+                    "-1",
+                    "",
+                    "",
+                    "",
+                    "",
+                )
+                await tydom_hub.test_credentials()
+
+                await self.async_set_unique_id(user_input[CONF_MAC])
+                self._abort_if_unique_id_configured()
+            except TydomLocalPasswordPairingError:
+                errors["base"] = "local_pairing_failed"
+            except CannotConnect:
+                errors["base"] = "cannot_connect"
+            except InvalidHost:
+                errors[CONF_HOST] = "invalid_host"
+            except InvalidMacAddress:
+                errors[CONF_MAC] = "invalid_macaddress"
+            except InvalidPassword:
+                errors["base"] = "local_pairing_failed"
+            except InvalidRefreshInterval:
+                errors[CONF_REFRESH_INTERVAL] = "invalid_refresh_interval"
+            except InvalidZoneHome:
+                errors[CONF_ZONES_HOME] = "invalid_zone_config"
+                default_zone_home = ""
+            except InvalidZoneAway:
+                errors[CONF_ZONES_AWAY] = "invalid_zone_config"
+                default_zone_away = ""
+            except InvalidZoneNight:
+                errors[CONF_ZONES_NIGHT] = "invalid_zone_config"
+                default_zone_night = ""
+            except TydomClientApiClientCommunicationError:
+                errors["base"] = "communication_error"
+            except TydomClientApiClientAuthenticationError:
+                errors["base"] = "authentication_error"
+            except TydomClientApiClientError:
+                errors["base"] = "unknown"
+            except AbortFlow:
+                raise
+            except Exception:  # pylint: disable=broad-except
+                LOGGER.exception("Unexpected exception during local button pairing")
+                errors["base"] = "unknown"
+            else:
+                return self.async_create_entry(  # type: ignore[return-value]
+                    title="Tydom-" + user_input[CONF_MAC][6:], data=user_input
+                )
+
+        user_input = user_input or {}
+        return self.async_show_form(  # type: ignore[return-value]
+            step_id=step_id,
+            description_placeholders=description_placeholders,
+            data_schema=vol.Schema(
+                {
+                    vol.Required(
+                        CONF_HOST, default=user_input.get(CONF_HOST, default_host)
+                    ): selector.TextSelector(
+                        selector.TextSelectorConfig(
+                            type=selector.TextSelectorType.TEXT,
+                            autocomplete="off",
+                        )
+                    ),
+                    vol.Required(
+                        CONF_MAC, default=user_input.get(CONF_MAC, default_mac)
+                    ): selector.TextSelector(
+                        selector.TextSelectorConfig(
+                            type=selector.TextSelectorType.TEXT,
+                            autocomplete="off",
+                        )
+                    ),
+                    vol.Required(
+                        CONF_REFRESH_INTERVAL,
+                        default=user_input.get(CONF_REFRESH_INTERVAL, "30"),
+                    ): selector.NumberSelector(
+                        selector.NumberSelectorConfig(
+                            min=1,
+                            max=1440,
+                            step=1,
+                            unit_of_measurement="minutes",
+                            mode=selector.NumberSelectorMode.BOX,
+                        )
+                    ),
+                    vol.Optional(
+                        CONF_ZONES_HOME, default=default_zone_home
+                    ): selector.TextSelector(
+                        selector.TextSelectorConfig(
+                            type=selector.TextSelectorType.TEXT,
+                            autocomplete="off",
+                        )
+                    ),
+                    vol.Optional(
+                        CONF_ZONES_AWAY, default=default_zone_away
+                    ): selector.TextSelector(
+                        selector.TextSelectorConfig(
+                            type=selector.TextSelectorType.TEXT,
+                            autocomplete="off",
+                        )
+                    ),
+                    vol.Optional(
+                        CONF_ZONES_NIGHT, default=default_zone_night
+                    ): selector.TextSelector(
+                        selector.TextSelectorConfig(
+                            type=selector.TextSelectorType.TEXT,
+                            autocomplete="off",
+                        )
+                    ),
+                    vol.Optional(
+                        CONF_PIN, default=user_input.get(CONF_PIN, "")
+                    ): selector.TextSelector(
+                        selector.TextSelectorConfig(
+                            type=selector.TextSelectorType.PASSWORD,
+                            autocomplete="off",
+                        )
+                    ),
+                }
+            ),
+            errors=errors,
         )
 
     async def async_step_user_manual(
@@ -616,6 +801,8 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         if user_input is not None:
             if user_input.get(CONF_CONFIG_MODE) == CONF_MANUAL_MODE:
                 return await self.async_step_discovery_confirm_manual()
+            if user_input.get(CONF_CONFIG_MODE) == CONF_LOCAL_BUTTON_MODE:
+                return await self.async_step_discovery_confirm_local_pair()
             else:
                 return await self.async_step_discovery_confirm_cloud()
         else:
@@ -636,6 +823,10 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                                     selector.SelectOptionDict(
                                         value=CONF_MANUAL_MODE, label=CONF_MANUAL_MODE
                                     ),
+                                    selector.SelectOptionDict(
+                                        value=CONF_LOCAL_BUTTON_MODE,
+                                        label=CONF_LOCAL_BUTTON_MODE,
+                                    ),
                                 ],
                                 translation_key=CONF_CONFIG_MODE,
                             ),
@@ -644,6 +835,16 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 ),
                 errors=_errors,
             )
+
+    async def async_step_discovery_confirm_local_pair(self, user_input=None):
+        """Pair a discovered gateway through its physical-button window."""
+        return await self.async_step_user_local_pair(
+            user_input,
+            step_id="discovery_confirm_local_pair",
+            default_host=self._discovered_host,
+            default_mac=self._discovered_mac,
+            description_placeholders={"name": self._name or ""},
+        )
 
     async def async_step_discovery_confirm_manual(self, user_input=None):
         """Confirm discovery manual."""
