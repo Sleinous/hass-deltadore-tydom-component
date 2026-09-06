@@ -25,7 +25,7 @@
             },
             "user_local_pair": {
                 "title": "Appairer Delta Dore Tydom en local",
-                "description": "Utilisez cette option uniquement pour une passerelle locale dont le mot de passe est inconnu. Saisissez l'hôte local et l'adresse MAC de la passerelle, appuyez sur son bouton physique, puis validez rapidement ce formulaire. La fenêtre d'appairage temporaire est utilisée une seule fois pour récupérer le mot de passe local ; ce mot de passe n'est jamais affiché ni journalisé.",
+                "description": "Utilisez cette option uniquement pour une passerelle locale dont le mot de passe est inconnu. Remplissez tous les champs avant d'appuyer sur la passerelle. En toute dernière étape, appuyez sur son bouton physique puis soumettez immédiatement le formulaire, sans modifier de champ entre l'appui et la validation. La fenêtre d'appairage temporaire est utilisée une seule fois pour récupérer le mot de passe local ; ce mot de passe n'est jamais affiché ni journalisé.",
                 "data": {
                     "host": "IP/hostname local de la passerelle Tydom",
                     "mac": "Adresse MAC (12 caractères, sans séparateurs)",
@@ -75,7 +75,7 @@
             },
             "discovery_confirm_local_pair": {
                 "title": "Appairer localement le Delta Dore Tydom découvert",
-                "description": "Une passerelle Tydom a été découverte ({name}). Utilisez cette option uniquement lorsque son mot de passe local est inconnu : appuyez sur le bouton physique de la passerelle, puis validez rapidement ce formulaire. La fenêtre d'appairage temporaire est utilisée une seule fois pour récupérer le mot de passe local ; ce mot de passe n'est jamais affiché ni journalisé.",
+                "description": "Une passerelle Tydom a été découverte ({name}). Utilisez cette option uniquement lorsque son mot de passe local est inconnu. Remplissez tous les champs avant d'appuyer sur la passerelle. En toute dernière étape, appuyez sur son bouton physique puis soumettez immédiatement le formulaire, sans modifier de champ entre l'appui et la validation. La fenêtre d'appairage temporaire est utilisée une seule fois pour récupérer le mot de passe local ; ce mot de passe n'est jamais affiché ni journalisé.",
                 "data": {
                     "host": "IP/hostname local de la passerelle Tydom",
                     "mac": "Adresse MAC (12 caractères, sans séparateurs)",
