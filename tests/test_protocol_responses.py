@@ -69,6 +69,7 @@ MessageHandler = handler_module.MessageHandler
 TydomLight = devices_module.TydomLight
 TydomEnergy = devices_module.TydomEnergy
 TydomAlarm = devices_module.TydomAlarm
+TydomOpenIssuesNotReadyError = devices_module.TydomOpenIssuesNotReadyError
 
 for name, original in _original_modules.items():
     if original is _MISSING:
@@ -709,6 +710,100 @@ class ProtocolResponseTests(IsolatedAsyncioTestCase):
             timeout=10.0,
         )
         callback.assert_called_once_with()
+
+    async def test_open_issues_return_the_products_reported_by_the_central(self) -> None:
+        """OPEN_ISSUES must retain only dashboard-safe product metadata."""
+        client = MagicMock()
+        client.get_historic_cdata = AsyncMock(
+            return_value=[
+                {
+                    "values": {
+                        "product": {
+                            "id": 42,
+                            "nameCustom": "Office window",
+                            "nameStd": "MDO",
+                            "number": 3,
+                            "typeShort": "MDO",
+                            "typeLong": "Opening detector",
+                            "zone": 1,
+                            "privateRadioIdentifier": "hidden",
+                        },
+                        "defects": ["OPEN"],
+                    }
+                },
+                {
+                    "values": {
+                        "product": {
+                            "id": 43,
+                            "nameCustom": "Front door",
+                            "typeShort": "MO",
+                            "typeLong": "Door opening contact",
+                        },
+                        "defects": ["OPEN"],
+                    }
+                },
+                {"EOR": True},
+            ]
+        )
+        alarm = TydomAlarm(client, "10_20", "20", "Alarm", "alarm", "10", {}, {})
+        callback = MagicMock()
+        alarm.register_callback(callback)
+
+        result = await alarm.get_open_issues(timeout=10.0, log_timeout=False)
+
+        self.assertEqual(
+            result,
+            [
+                {
+                    "id": 42,
+                    "name": "Office window",
+                    "name_custom": "Office window",
+                    "name_standard": "MDO",
+                    "number": 3,
+                    "type_short": "MDO",
+                    "type_long": "Opening detector",
+                    "zone": 1,
+                    "defects": ["OPEN"],
+                },
+                {
+                    "id": 43,
+                    "name": "Front door",
+                    "name_custom": "Front door",
+                    "type_short": "MO",
+                    "type_long": "Door opening contact",
+                    "defects": ["OPEN"],
+                },
+            ],
+        )
+        self.assertEqual(alarm.open_issues, result)
+        client.get_historic_cdata.assert_awaited_once_with(
+            "20", "10", "OPEN_ISSUES", nbElement=50, log_timeout=False, timeout=10.0
+        )
+        callback.assert_called_once_with()
+
+    async def test_open_issues_does_not_replace_cache_with_central_error(self) -> None:
+        """A temporary OPEN_ISSUES error must be retried by the alarm entity."""
+        client = MagicMock()
+        client.get_historic_cdata = AsyncMock(
+            return_value=[
+                {
+                    "values": {
+                        "error": "error detected",
+                    }
+                },
+                {"EOR": True},
+            ]
+        )
+        alarm = TydomAlarm(client, "10_20", "20", "Alarm", "alarm", "10", {}, {})
+        alarm._open_issues = [{"id": 42, "name": "Previous issue"}]
+        callback = MagicMock()
+        alarm.register_callback(callback)
+
+        with self.assertRaises(TydomOpenIssuesNotReadyError):
+            await alarm.get_open_issues()
+
+        self.assertEqual(alarm.open_issues, [{"id": 42, "name": "Previous issue"}])
+        callback.assert_not_called()
 
     async def test_acknowledgement_does_not_block_on_gateway_history(self) -> None:
         """Acknowledgement must not issue an unsupported 60-second history read."""
