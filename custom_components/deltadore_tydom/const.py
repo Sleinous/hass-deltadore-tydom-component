@@ -18,6 +18,7 @@ CONF_CONFIG_MODE = "config_mode"
 
 CONF_CLOUD_MODE = "tydom_cloud_account"
 CONF_MANUAL_MODE = "tydom_credentials"
+CONF_LOCAL_BUTTON_MODE = "tydom_local_button_pairing"
 
 # Mapping des unités Tydom vers les unités Home Assistant
 TYDOM_UNIT_TO_HA_UNIT = {

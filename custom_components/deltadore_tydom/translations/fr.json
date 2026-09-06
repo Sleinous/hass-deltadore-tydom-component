@@ -3,7 +3,7 @@
         "step": {
             "user": {
                 "title": "Configuration Delta Dore Tydom",
-                "description": "Choisissez le mode de configuration. Le mode cloud récupère automatiquement les identifiants Tydom à partir de votre compte Delta Dore. Le mode manuel nécessite que vous saisissiez directement le mot de passe Tydom.",
+                "description": "Choisissez le mode de configuration. Le mode cloud récupère automatiquement les identifiants Tydom à partir de votre compte Delta Dore. Le mode manuel nécessite que vous saisissiez directement le mot de passe Tydom. L'appairage par bouton local récupère le mot de passe local uniquement après un appui explicite sur la passerelle.",
                 "data": {
                     "config_mode": "Mode de configuration"
                 }
@@ -16,6 +16,19 @@
                     "mac": "Adresse MAC (12 caractères, sans séparateurs)",
                     "password": "Mot de passe Tydom",
                     "tydom_password": "Mot de passe Tydom",
+                    "refresh_interval": "Intervalle de rafraîchissement en minutes (par défaut : 30)",
+                    "zones_away": "Zones actives en mode alarme absent (séparées par des virgules, ex. : 1,2,4)",
+                    "zones_home": "Zones actives en mode alarme présent (séparées par des virgules, ex. : 1,2,4)",
+                    "zones_night": "Zones actives en mode alarme nuit (séparées par des virgules, ex. : 1,2,4)",
+                    "pin": "Code PIN de l'alarme (optionnel, requis pour le contrôle de l'alarme)"
+                }
+            },
+            "user_local_pair": {
+                "title": "Appairer Delta Dore Tydom en local",
+                "description": "Utilisez cette option uniquement pour une passerelle locale dont le mot de passe est inconnu. Saisissez l'hôte local et l'adresse MAC de la passerelle, appuyez sur son bouton physique, puis validez rapidement ce formulaire. La fenêtre d'appairage temporaire est utilisée une seule fois pour récupérer le mot de passe local ; ce mot de passe n'est jamais affiché ni journalisé.",
+                "data": {
+                    "host": "IP/hostname local de la passerelle Tydom",
+                    "mac": "Adresse MAC (12 caractères, sans séparateurs)",
                     "refresh_interval": "Intervalle de rafraîchissement en minutes (par défaut : 30)",
                     "zones_away": "Zones actives en mode alarme absent (séparées par des virgules, ex. : 1,2,4)",
                     "zones_home": "Zones actives en mode alarme présent (séparées par des virgules, ex. : 1,2,4)",
@@ -41,7 +54,7 @@
             },
             "discovery_confirm": {
                 "title": "Configuration Delta Dore Tydom",
-                "description": "Une passerelle Tydom a été découverte ({name}). Choisissez le mode de configuration.",
+                "description": "Une passerelle Tydom a été découverte ({name}). Choisissez le mode de configuration. L'appairage par bouton local récupère le mot de passe local uniquement après un appui explicite sur la passerelle.",
                 "data": {
                     "config_mode": "Mode de configuration"
                 }
@@ -53,6 +66,19 @@
                     "host": "IP/hostname du Tydom ou de la médiation",
                     "mac": "Adresse MAC (12 caractères, sans séparateurs)",
                     "tydom_password": "Mot de passe Tydom",
+                    "refresh_interval": "Intervalle de rafraîchissement en minutes (par défaut : 30)",
+                    "zones_away": "Zones actives en mode alarme absent (séparées par des virgules, ex. : 1,2,4)",
+                    "zones_home": "Zones actives en mode alarme présent (séparées par des virgules, ex. : 1,2,4)",
+                    "zones_night": "Zones actives en mode alarme nuit (séparées par des virgules, ex. : 1,2,4)",
+                    "pin": "Code PIN de l'alarme (optionnel, requis pour le contrôle de l'alarme)"
+                }
+            },
+            "discovery_confirm_local_pair": {
+                "title": "Appairer localement le Delta Dore Tydom découvert",
+                "description": "Une passerelle Tydom a été découverte ({name}). Utilisez cette option uniquement lorsque son mot de passe local est inconnu : appuyez sur le bouton physique de la passerelle, puis validez rapidement ce formulaire. La fenêtre d'appairage temporaire est utilisée une seule fois pour récupérer le mot de passe local ; ce mot de passe n'est jamais affiché ni journalisé.",
+                "data": {
+                    "host": "IP/hostname local de la passerelle Tydom",
+                    "mac": "Adresse MAC (12 caractères, sans séparateurs)",
                     "refresh_interval": "Intervalle de rafraîchissement en minutes (par défaut : 30)",
                     "zones_away": "Zones actives en mode alarme absent (séparées par des virgules, ex. : 1,2,4)",
                     "zones_home": "Zones actives en mode alarme présent (séparées par des virgules, ex. : 1,2,4)",
@@ -89,6 +115,7 @@
             "invalid_refresh_interval": "L'intervalle de rafraîchissement n'est pas valide",
             "communication_error": "Impossible de se connecter à la passerelle Tydom",
             "authentication_error": "Erreur d'authentification",
+            "local_pairing_failed": "La fenêtre d'appairage local n'était pas disponible ou la passerelle n'a pas renvoyé de mot de passe. Appuyez sur le bouton de la passerelle et validez à nouveau le formulaire.",
             "invalid_zone_config": "La configuration des zones est invalide. Syntaxe : zone_id_1,zone_id_2... Exemple : 1,2,4",
             "validation_error": "Erreur de validation",
             "value_out_of_range": "La valeur est hors des limites autorisées",
@@ -149,7 +176,8 @@
         "config_mode": {
             "options": {
                 "tydom_cloud_account": "Récupérer les identifiants Tydom en utilisant le compte cloud Delta Dore",
-                "tydom_credentials": "Saisir manuellement les identifiants Tydom"
+                "tydom_credentials": "Saisir manuellement les identifiants Tydom",
+                "tydom_local_button_pairing": "Appairer en local avec le bouton de la passerelle"
             }
         }
     },
