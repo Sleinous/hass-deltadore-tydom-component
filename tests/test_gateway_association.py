@@ -16,7 +16,7 @@ class _Client:
     def __init__(self) -> None:
         self.payloads: list[dict[str, str | int]] = []
 
-    async def post_device_install(self, payload: dict[str, str | int]) -> None:
+    async def post_device_discovery(self, payload: dict[str, str | int]) -> None:
         self.payloads.append(payload)
 
 

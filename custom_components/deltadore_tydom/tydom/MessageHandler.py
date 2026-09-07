@@ -755,7 +755,7 @@ class MessageHandler:
             "/devices/data": self.parse_devices_data,
             "/devices/cdata": self.parse_devices_cdata,
             "/devices/cmeta": self.parse_cmeta_data,
-            "/devices/install": partial(no_op, "msg_pairing"),
+            "/devices": partial(no_op, "msg_pairing"),
             "/devices/meta": self.parse_devices_metadata,
             "/events": event_message,
             "/groups/file": self.parse_groups_file,
