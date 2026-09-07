@@ -286,7 +286,7 @@ def get_association_choices(category: str) -> tuple[AssociationChoice, ...]:
 def get_install_payload(
     profile_id: str, network: int | None = None
 ) -> dict[str, str | int]:
-    """Build a validated ``POST /devices/install`` request body."""
+    """Build a validated ``POST /devices`` discovery request body."""
     try:
         profile = DISCOVERY_PROFILES[profile_id]
     except KeyError as err:
@@ -310,7 +310,7 @@ async def start_product_association(
 ) -> dict[str, str | int]:
     """Start association on one configured TYDOM/Tywell gateway."""
     payload = get_install_payload(profile_id, network)
-    await tydom_hub._tydom_client.post_device_install(payload)
+    await tydom_hub._tydom_client.post_device_discovery(payload)
     return payload
 
 

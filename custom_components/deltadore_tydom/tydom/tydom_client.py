@@ -1150,15 +1150,15 @@ class TydomClient:
         req = "GET"
         await self.send_message(method=req, msg=msg_type)
 
-    async def post_device_install(self, payload: dict[str, str | int]) -> None:
-        """Start the gateway's generic product-association workflow.
+    async def post_device_discovery(self, payload: dict[str, str | int]) -> None:
+        """Start the gateway's generic product-discovery workflow.
 
-        ``/devices/install`` is the endpoint used by the official application
-        for TYDOM and Tywell product discovery.  Some gateway firmware keeps
-        this discovery request open while it listens for a radio product and
-        does not send a synchronous HTTP reply.  Dispatch it without waiting
-        for such a reply; callers must subsequently reload the inventory to
-        determine whether a product was discovered.
+        The official application sends its ``DISCOVER`` request to
+        ``/devices``. Some gateway firmware keeps this request open while it
+        listens for a radio product and does not send a synchronous HTTP
+        reply. Dispatch it without waiting for such a reply; callers must
+        subsequently reload the inventory to determine whether a product was
+        discovered.
         """
         required = {"protocol", "type", "profile"}
         missing = required.difference(payload)
@@ -1166,9 +1166,7 @@ class TydomClient:
             raise ValueError(
                 "Product association payload is missing: " + ", ".join(sorted(missing))
             )
-        transaction_id = await self.send_request(
-            "POST", "/devices/install", body=payload
-        )
+        transaction_id = await self.send_request("POST", "/devices", body=payload)
         LOGGER.debug(
             "Dispatched product-association request (transaction_id: %s)",
             transaction_id,
