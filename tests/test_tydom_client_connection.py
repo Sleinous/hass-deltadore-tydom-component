@@ -262,18 +262,18 @@ class TestManagedConnection(IsolatedAsyncioTestCase):
             ],
         )
 
-    async def test_product_association_does_not_wait_for_gateway_reply(self) -> None:
+    async def test_product_discovery_does_not_wait_for_gateway_reply(self) -> None:
         """Discovery must not fail when a gateway keeps its radio scan open."""
         client = self._client()
         client.send_request = AsyncMock(return_value="request-1")
 
-        await client.post_device_install(
+        await client.post_device_discovery(
             {"protocol": "X3D", "type": "x3d_rm", "profile": "light"}
         )
 
         client.send_request.assert_awaited_once_with(
             "POST",
-            "/devices/install",
+            "/devices",
             body={"protocol": "X3D", "type": "x3d_rm", "profile": "light"},
         )
 
