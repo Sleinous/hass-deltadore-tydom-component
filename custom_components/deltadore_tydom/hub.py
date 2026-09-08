@@ -1501,8 +1501,11 @@ class Hub:
         await self._tydom_client.post_refresh()
         await self._tydom_client.get_configs_file()
         await self._tydom_client.get_groups()
-        await self._tydom_client.get_devices_meta()
-        await self._tydom_client.get_devices_cmeta()
+        # Association and removal change the gateway inventory. A user-triggered
+        # reload must bypass the one-hour metadata cache or newly associated
+        # products remain invisible until that cache expires.
+        await self._tydom_client.get_devices_meta(force_refresh=True)
+        await self._tydom_client.get_devices_cmeta(force_refresh=True)
         await self._tydom_client.get_devices_data()
         await self._tydom_client.get_scenarii()
         await self._tydom_client.get_moments()
