@@ -117,16 +117,19 @@ class GatewayAssociationTests(IsolatedAsyncioTestCase):
 
         self.assertEqual(local_client.payloads, [payload])
 
-    async def test_remote_entry_without_local_match_is_rejected(self) -> None:
-        """Never attempt radio association over a cloud-only connection."""
+    async def test_remote_entry_without_local_match_uses_selected_gateway(self) -> None:
+        """Cloud-only installations retain the official mediation workflow."""
+        remote_client = _Client()
+        remote_client._remote_mode = True
         remote_hub = SimpleNamespace(
             _mac="001A250428DB",
-            _tydom_client=SimpleNamespace(_remote_mode=True),
+            _tydom_client=remote_client,
             _hass=SimpleNamespace(data={DOMAIN: {}}),
         )
 
-        with self.assertRaisesRegex(ValueError, "direct local connection"):
-            await start_product_association(remote_hub, "opening_x3d")
+        payload = await start_product_association(remote_hub, "opening_x3d")
+
+        self.assertEqual(remote_client.payloads, [payload])
 
     async def test_removal_uses_the_physical_device_identifier(self) -> None:
         """A removal is performed against the gateway inventory ID."""
