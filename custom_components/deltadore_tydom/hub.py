@@ -602,15 +602,20 @@ OFFICIAL_ASSOCIATION_CATALOG: dict[str, tuple[AssociationChoice, ...]] = {
 
 
 def get_association_choices(category: str) -> tuple[AssociationChoice, ...]:
-    """Return official models followed by generic fallback recipes."""
+    """Return official models, or generic recipes only when necessary."""
     official = OFFICIAL_ASSOCIATION_CATALOG.get(category, ())
     fallback = ASSOCIATION_CATALOG.get(category, ())
     if not official and not fallback:
         raise ValueError(f"Unknown TYDOM association category: {category}")
 
+    # Do not make users choose a radio recipe when the official catalog knows
+    # the exact physical product. Generic recipes remain only for categories
+    # which have no catalogue-backed products (for example, legacy cameras).
+    choices = official or fallback
+
     # A model can appear in multiple app catalog groups. HA Select options must
     # remain unique while preserving the official catalog ordering.
-    return tuple({choice.label: choice for choice in (*official, *fallback)}.values())
+    return tuple({choice.label: choice for choice in choices}.values())
 
 
 def get_install_payload(

@@ -106,6 +106,16 @@ class GatewayAssociationTests(IsolatedAsyncioTestCase):
             {"protocol": "X3D", "type": "direct", "profile": "remote"},
         )
 
+    def test_official_products_hide_ambiguous_generic_recipes(self) -> None:
+        """Known hardware must not be mixed with raw radio-profile choices."""
+        self.assertEqual(
+            tuple(
+                choice.label
+                for choice in get_association_choices("Interrupteurs")
+            ),
+            ("TYXIA 2310", "TYXIA 2600", "TYXIA 2700"),
+        )
+
     def test_product_usage_is_limited_to_the_official_catalog(self) -> None:
         """An opening detector only offers its documented door/window usages."""
         tydom_hub = object.__new__(Hub)
