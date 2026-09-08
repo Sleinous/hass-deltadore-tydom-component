@@ -10,10 +10,12 @@ from custom_components.deltadore_tydom.hub import (
     start_product_association,
 )
 from custom_components.deltadore_tydom.hub import Hub
+from custom_components.deltadore_tydom.const import DOMAIN
 
 
 class _Client:
     def __init__(self) -> None:
+        self._remote_mode = False
         self.payloads: list[dict[str, str | int]] = []
 
     async def post_device_discovery(self, payload: dict[str, str | int]) -> None:
@@ -96,6 +98,35 @@ class GatewayAssociationTests(IsolatedAsyncioTestCase):
         payload = await start_product_association(tydom_hub, "opening_x3d")
 
         self.assertEqual(client.payloads, [payload])
+
+    async def test_remote_entry_uses_the_matching_local_gateway(self) -> None:
+        """Radio association must not be dispatched through cloud mediation."""
+        local_client = _Client()
+        local_hub = SimpleNamespace(
+            _mac="00:1a:25:04:28:db", _tydom_client=local_client
+        )
+        remote_hub = SimpleNamespace(
+            _mac="001A250428DB",
+            _tydom_client=SimpleNamespace(_remote_mode=True),
+        )
+        remote_hub._hass = SimpleNamespace(
+            data={DOMAIN: {"remote-entry": remote_hub, "local-entry": local_hub}}
+        )
+
+        payload = await start_product_association(remote_hub, "opening_x3d")
+
+        self.assertEqual(local_client.payloads, [payload])
+
+    async def test_remote_entry_without_local_match_is_rejected(self) -> None:
+        """Never attempt radio association over a cloud-only connection."""
+        remote_hub = SimpleNamespace(
+            _mac="001A250428DB",
+            _tydom_client=SimpleNamespace(_remote_mode=True),
+            _hass=SimpleNamespace(data={DOMAIN: {}}),
+        )
+
+        with self.assertRaisesRegex(ValueError, "direct local connection"):
+            await start_product_association(remote_hub, "opening_x3d")
 
     async def test_removal_uses_the_physical_device_identifier(self) -> None:
         """A removal is performed against the gateway inventory ID."""
