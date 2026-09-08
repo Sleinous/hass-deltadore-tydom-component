@@ -63,9 +63,10 @@ Platform | Description
 - Keep Tywell wall-controller sensors, area-backed climate control and
   companion weather or shutter controls attached to the same physical device
   across the different endpoint layouts advertised by TYDOM.
-- Expose alarm modes and zones, event history and acknowledgement, supported
-  remote maintenance operations, and native automation events from compatible
-  wall switches and remote controls.
+- Expose alarm modes and zones, event history and acknowledgement, the actor
+  behind the latest alarm state change, supported remote maintenance and
+  forced-arming operations, and native automation events from compatible wall
+  switches and remote controls.
 
 ### Tested hardware
 
@@ -78,7 +79,7 @@ Category | Confirmed hardware or configuration | Home Assistant support
 -- | -- | --
 Alarm and safety | TYXAL+, CS8000, CSX40 and DFR TYXAL+ smoke detectors | Alarm control, zone modes, diagnostics, smoke state, event history, acknowledgement and supported remote product/zone management.
 Climate and heating | Tybox 5101 with Typass ATL, Tywell Control, Tywell 2050, TYXIA 1137, Calybox and RF 6600 FP | Area-backed climate control, temperatures, heating and cooling setpoints, operating modes, humidity, battery and capability-driven heating or pilot-wire commands where advertised.
-Energy monitoring | TYWATT 1000, TYWATT 2000 and TYWATT 5400 with EMIC | Power, current and energy measurements, including heating and domestic hot water channels where advertised.
+Energy monitoring | TYWATT 1000, TYWATT 2000 and TYWATT 5400 with EMIC | Power, current and energy measurements, including heating, domestic hot water and cooling channels where advertised.
 Gates and garage doors | TYXIA 4620 dry-contact receivers | Stateless toggle buttons matching the receiver's open/stop/close pulse sequence, without claiming unavailable position feedback.
 Lighting and switching | TYXIA 4910 fixed-output and TYXIA 4940 dimming receivers configured under TYDOM's `Others` usage, TYXIA 6610, Delta Dore Easy Plug and compatible X3D equipment | Lights, brightness, switches and plugs according to the capabilities reported by the endpoint.
 Openings and covers | TYMOOV and Well'com roller shutters, BSO installations, Profalux `MOT-C1Z06F` and `MOT-C1Z10F` Zigbee shutters, TYXIA 5731 awnings, K-Line DVI openings and K-Line POD doors | Native covers with up, down, stop and position control where advertised; awning commands and positions are translated into Home Assistant open/close semantics; opening/contact state is exposed when feedback is supplied.
@@ -213,6 +214,50 @@ Verify that the genuine replacement device is present and working before using
 **Remove device**. Filtered placeholders, such as empty Profalux `Produit X`
 endpoints, will not be recreated while they remain empty.
 
+### Device association and identification
+
+Some devices expose association and physical-identification commands through
+their endpoint metadata. When the device advertises the corresponding command,
+its page exposes the matching button:
+
+- **Démarrer le mode association** sends `modeAsso: START`;
+- **Identifier l'appareil** sends `localisation: START`.
+
+The same actions are also available through services for automations:
+
+- `deltadore_tydom.start_device_association` sends `modeAsso: START` to begin
+  the device's own association procedure;
+- `deltadore_tydom.identify_device` sends `localisation: START`, allowing the
+  physical equipment to identify itself.
+
+Select the primary entity of the equipment (for example its cover, light or
+climate entity), then follow the product's installation instructions. These
+services only run commands advertised by that specific endpoint, so they fail
+safely on products and firmware that do not support them.
+
+### Add or remove a product from a gateway
+
+The gateway device page now exposes a guided association flow compatible with
+TYDOM 1.0/2.0, TYDOM Home/Pro and Tywell Pro gateways:
+
+1. Choose **Catégorie à associer** (lighting, shutters and awnings, heating,
+   security/openings, energy, and so on).
+2. Choose **Produit à associer**. The available families change with the
+   category. A compatible radio recipe may intentionally be offered in several
+   categories; for example a TYXIA receiver can be used for lighting or a
+   gate/garage.
+3. Press **Démarrer l'association**, then complete the physical association on
+   the product as instructed by its manual.
+4. Press **Recharger les appareils** once the association is complete to load
+   the refreshed gateway inventory immediately.
+
+The gateway remains authoritative: it rejects radio families unsupported by
+its firmware. The advanced `deltadore_tydom.start_product_association` service
+also accepts a `config_entry_id`, so it can target a newly configured gateway
+that has no entities yet. `deltadore_tydom.remove_product_association` removes
+the selected product from the physical gateway (not only from Home Assistant)
+and therefore requires `confirm: true`.
+
 ## Capturing data for unsupported devices
 
 The repository includes a read-only capture tool for documenting devices and
@@ -261,6 +306,8 @@ useful in Home Assistant:
 - `deltadore_tydom.get_events` returns alarm history and can filter it to alarm,
   activation/deactivation or unacknowledged events;
 - `deltadore_tydom.acknowledge_events` acknowledges pending alarm events;
+- `deltadore_tydom.force_arm` explicitly arms a configured Away, Home or Night
+  mode when normal arming was refused because of defects;
 - `deltadore_tydom.get_alarm_products` lists configured products and zones;
 - `deltadore_tydom.enter_alarm_maintenance` unlocks remote configuration and
   puts a disarmed CS8000 into maintenance mode;
@@ -281,15 +328,24 @@ finished. The installer code is used only for the request and is redacted from
 logs. Product deletion, access codes, telephone settings and siren
 configuration are not exposed.
 
+`force_arm` does not replace the normal Home Assistant alarm controls. Use it
+only after checking the reported defects and deciding that forced arming is
+appropriate.
+
 The TYXAL alarm device also provides an **Acknowledge events** button for
 convenient dashboard use without requiring a service call or automation.
 
+When TYDOM reports the actor for an alarm transition, the alarm entity exposes
+`changed_by` with the user-code or product name and `changed_by_type` with
+either `access_code` or `product`. These attributes describe the latest
+reported arm or disarm transition.
+
 ## Known limitations
 
-- TYXIA 4620 gate and garage receivers provide an impulse command but no
-  position or direction feedback. Home Assistant therefore exposes a stateless
-  toggle button and cannot determine whether the next pulse will open, stop or
-  close the motor.
+- Dry-contact TYXIA 4620 gate and garage configurations provide an impulse
+  command but no position or direction feedback. Home Assistant therefore
+  exposes a stateless toggle button and cannot determine whether the next pulse
+  will open, stop or close the motor.
 - The native Tywell shutter cover replays the `TWC_UP`, `TWC_DOWN` and
   `TWC_STOP` scenarios created by TYDOM. Its shutter membership must therefore
   be configured in the official application, and aggregate position is only

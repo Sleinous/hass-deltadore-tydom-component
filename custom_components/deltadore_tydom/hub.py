@@ -3,8 +3,11 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import time
 from collections.abc import Callable
+from dataclasses import dataclass
+
 from aiohttp import ClientWebSocketResponse, ClientSession
 
 from homeassistant.components.binary_sensor import BinarySensorEntity
@@ -62,6 +65,12 @@ from .ha_entities import (
     HATwcShutterCover,
     HASwitch,
     HAButton,
+    HADeviceAssociationButton,
+    HADeviceRemovalButton,
+    HAGatewayAssociationCategorySelect,
+    HAGatewayAssociationProductSelect,
+    HAGatewayAssociationUsageSelect,
+    HAGatewayStartAssociationButton,
     HAAlarmAcknowledgeButton,
     HAAlarmPendingEventsSensor,
     HAReloadButton,
@@ -73,10 +82,615 @@ from .ha_entities import (
     HARemoteBattery,
     HARemoteEvent,
     is_binary_attribute,
+    ASSOCIATION_COMMAND,
+    IDENTIFY_COMMAND,
+    supports_command,
 )
 
-from .const import LOGGER, get_polling_interval_for_validity, STRUCTURED_LOGGER
+from .const import DOMAIN, LOGGER, STRUCTURED_LOGGER, get_polling_interval_for_validity
 from .remote_registry_migration import migrate_legacy_remote_endpoint
+
+
+@dataclass(frozen=True, slots=True)
+class DiscoveryProfile:
+    """One radio/product family accepted by the gateway install API."""
+
+    label: str
+    protocol: str
+    type: str
+    profile: str
+
+
+@dataclass(frozen=True, slots=True)
+class AssociationChoice:
+    """A product-family choice shown under one user-facing category."""
+
+    label: str
+    profile_id: str | None
+
+
+# These profiles are the request values used by the official TYDOM app. The
+# gateway stays authoritative and accepts only values supported by its firmware.
+DISCOVERY_PROFILES: dict[str, DiscoveryProfile] = {
+    "alarm_x2d": DiscoveryProfile("TYXAL / alarm X2D", "X3D", "x2d_a", "alarm"),
+    "alarm_x3d": DiscoveryProfile("TYXAL+ / alarm X3D", "X3D", "x3d_ppa", "alarm"),
+    "aeraulic_zigbee": DiscoveryProfile("Aéraulique Zigbee", "ZIGBEE", "", "aeraulic"),
+    "awning_x3d": DiscoveryProfile("Store banne X3D", "X3D", "x3d_rm", "awning"),
+    "boiler_drive_x3d": DiscoveryProfile(
+        "Chaudière Drive X3D", "X3D", "x3d_rm", "boilerDrive"
+    ),
+    "controller_x3d": DiscoveryProfile(
+        "Contrôleur X3D", "X3D", "x3d_pps", "controller"
+    ),
+    "detector_x3d": DiscoveryProfile("Détecteur X3D", "X3D", "direct", "detector"),
+    "electric_zigbee": DiscoveryProfile(
+        "Équipement électrique Zigbee", "ZIGBEE", "", "electric"
+    ),
+    "light_x3d": DiscoveryProfile("Éclairage X3D", "X3D", "x3d_rm", "light"),
+    "light_zigbee": DiscoveryProfile("Éclairage Zigbee", "ZIGBEE", "", "light"),
+    "generic_x3d": DiscoveryProfile(
+        "Produit générique X3D", "X3D", "x3d_pp", "generic"
+    ),
+    "meter_x3d": DiscoveryProfile("Compteur / mesure X3D", "X3D", "direct", "meter"),
+    "multi_x3d": DiscoveryProfile(
+        "Produit multifonction X3D", "X3D", "x3d_pped", "multi"
+    ),
+    "opening_x3d": DiscoveryProfile(
+        "Ouvrant / porte / fenêtre X3D", "X3D", "x3d_rm", "opening"
+    ),
+    "pod_x3d": DiscoveryProfile("Produit POD X3D", "X3D", "x3d_rm", "pod"),
+    "remote_x3d": DiscoveryProfile("Télécommande X3D", "X3D", "direct", "remote"),
+    "rt2012_measure_x3d": DiscoveryProfile(
+        "Mesure RT2012 X3D", "X3D", "x3d_pped", "rt2012_meas"
+    ),
+    "rt2012_no_outdoor_temp_x3d": DiscoveryProfile(
+        "RT2012 sans sonde extérieure X3D", "X3D", "x3d_pped", "rt2012_noOutTemp"
+    ),
+    "rt2012_x3d": DiscoveryProfile("RT2012 X3D", "X3D", "x3d_pped", "rt2012"),
+    "sensor_x3d": DiscoveryProfile("Capteur X3D", "X3D", "direct", "sensor"),
+    "shared_thermic_x3d": DiscoveryProfile(
+        "Chauffage partagé X3D", "X3D", "x3d_rmloop", "shThermic"
+    ),
+    "shutter_x3d": DiscoveryProfile("Volet roulant X3D", "X3D", "x3d_rm", "shutter"),
+    "shutter_activhome_x3d": DiscoveryProfile(
+        "Volet Activ'Home X3D", "X3D", "x3d_rm", "shutterActivHome"
+    ),
+    "shutter_brushless_x3d": DiscoveryProfile(
+        "Volet Brushless X3D", "X3D", "x3d_rm", "shutterBrushless"
+    ),
+    "shutter_projected_x3d": DiscoveryProfile(
+        "Volet projeté X3D", "X3D", "x3d_rm", "shutterProjected"
+    ),
+    "shutter_profalux_zigbee": DiscoveryProfile(
+        "Volet Profalux Zigbee", "ZIGBEE", "PROFALUX", "shutter"
+    ),
+    "shutter_rmlp_x3d": DiscoveryProfile(
+        "Volet RMLP X3D", "X3D", "x3d_rmlp", "shutter"
+    ),
+    "shutter_stella_zigbee": DiscoveryProfile(
+        "Volet Stella Zigbee", "ZIGBEE", "", "shutter"
+    ),
+    "shutter_zigbee": DiscoveryProfile("Volet roulant Zigbee", "ZIGBEE", "", "shutter"),
+    "temperature_x3d": DiscoveryProfile(
+        "Sonde de température X3D", "X3D", "direct", "temperature"
+    ),
+    "thermic_x3d": DiscoveryProfile("Chauffage X3D", "X3D", "x3d_rm", "thermic"),
+    "thermic_x2d": DiscoveryProfile("Chauffage X2D", "X3D", "x2d_d", "thermic"),
+    "thermic_x3d_es": DiscoveryProfile(
+        "Chauffage X3D (émetteur spécifique)", "X3D", "x3d_rm", "thermicES"
+    ),
+    "thermic_zigbee": DiscoveryProfile("Chauffage Zigbee", "ZIGBEE", "", "thermic"),
+    "typass_atl_x3d": DiscoveryProfile("TYPASS ATL X3D", "X3D", "direct", "typassAtl"),
+    "typass_saunier_x3d": DiscoveryProfile(
+        "TYPASS Saunier X3D", "X3D", "direct", "typassSaunier"
+    ),
+    "weather_plt": DiscoveryProfile("Station météo", "PltService", "", "weather"),
+}
+
+
+# The official application first asks for a usage, then a product family. Keep
+# its initial list of groups intact. A recipe may occur in several categories.
+ASSOCIATION_CATALOG: dict[str, tuple[AssociationChoice, ...]] = {
+    "Volets": (
+        AssociationChoice("Récepteur volet roulant X3D", "shutter_x3d"),
+        AssociationChoice("Volet Activ'Home", "shutter_activhome_x3d"),
+        AssociationChoice("Volet Brushless", "shutter_brushless_x3d"),
+        AssociationChoice("Volet projeté", "shutter_projected_x3d"),
+        AssociationChoice("Volet Profalux Zigbee", "shutter_profalux_zigbee"),
+        AssociationChoice("Volet Stella Zigbee", "shutter_stella_zigbee"),
+        AssociationChoice("Volet roulant Zigbee", "shutter_zigbee"),
+    ),
+    "Éclairages": (
+        AssociationChoice("Récepteur éclairage X3D", "light_x3d"),
+        AssociationChoice("Éclairage Zigbee", "light_zigbee"),
+    ),
+    "Thermique": (
+        AssociationChoice("Récepteur chauffage X3D", "thermic_x3d"),
+        AssociationChoice("Récepteur chauffage X2D", "thermic_x2d"),
+        AssociationChoice("Émetteur chauffage X3D spécifique", "thermic_x3d_es"),
+        AssociationChoice("Chaudière Drive", "boiler_drive_x3d"),
+        AssociationChoice("Chauffage Zigbee", "thermic_zigbee"),
+        AssociationChoice("Chauffage partagé X3D", "shared_thermic_x3d"),
+        AssociationChoice("TYPASS ATL", "typass_atl_x3d"),
+        AssociationChoice("TYPASS Saunier", "typass_saunier_x3d"),
+        AssociationChoice("Aéraulique Zigbee", "aeraulic_zigbee"),
+    ),
+    "Garage": (
+        AssociationChoice("Récepteur portail / garage X3D", "light_x3d"),
+        AssociationChoice("Récepteur volet / garage X3D", "shutter_x3d"),
+        AssociationChoice("Volet Profalux Zigbee", "shutter_profalux_zigbee"),
+    ),
+    "Portail": (
+        AssociationChoice("Récepteur portail X3D", "light_x3d"),
+        AssociationChoice("Produit générique X3D", "generic_x3d"),
+    ),
+    "Alarme": (
+        AssociationChoice("TYXAL / alarme X2D", "alarm_x2d"),
+        AssociationChoice("TYXAL+ / alarme X3D", "alarm_x3d"),
+        AssociationChoice("Détecteur X3D", "detector_x3d"),
+        AssociationChoice("Télécommande / clavier X3D", "remote_x3d"),
+    ),
+    "Caméras": (AssociationChoice("Aucun profil local documenté", None),),
+    "Consommation": (
+        AssociationChoice("Compteur ou mesure X3D", "meter_x3d"),
+        AssociationChoice("RT2012", "rt2012_x3d"),
+        AssociationChoice("RT2012 sans sonde extérieure", "rt2012_no_outdoor_temp_x3d"),
+        AssociationChoice("Mesure RT2012", "rt2012_measure_x3d"),
+    ),
+    "Porte": (
+        AssociationChoice("Ouvrant, porte ou fenêtre X3D", "opening_x3d"),
+        AssociationChoice("Produit POD X3D", "pod_x3d"),
+    ),
+    "Fenêtres": (
+        AssociationChoice("Ouvrant, porte ou fenêtre X3D", "opening_x3d"),
+        AssociationChoice("Produit POD X3D", "pod_x3d"),
+    ),
+    "Stores": (
+        AssociationChoice("Store banne X3D", "awning_x3d"),
+        AssociationChoice("Store projeté X3D", "shutter_projected_x3d"),
+    ),
+    "Prise": (
+        AssociationChoice("Prise / équipement électrique Zigbee", "electric_zigbee"),
+        AssociationChoice("Récepteur prise X3D", "light_x3d"),
+    ),
+    "Autres": (
+        AssociationChoice("Produit générique X3D", "generic_x3d"),
+        AssociationChoice("Produit multifonction X3D", "multi_x3d"),
+        AssociationChoice("Produit POD X3D", "pod_x3d"),
+        AssociationChoice("Station météo", "weather_plt"),
+    ),
+    "Télécommandes et claviers": (
+        AssociationChoice("Télécommande / émetteur X3D (ex. TYXIA 2600)", "remote_x3d"),
+        AssociationChoice("Contrôleur X3D", "controller_x3d"),
+    ),
+    "Interrupteurs": (
+        AssociationChoice("Interrupteur / récepteur éclairage X3D", "light_x3d"),
+        AssociationChoice("Éclairage Zigbee", "light_zigbee"),
+        AssociationChoice("Interrupteur / émetteur X3D (ex. TYXIA 2600)", "remote_x3d"),
+        AssociationChoice("Contrôleur X3D", "controller_x3d"),
+    ),
+    "Capteurs": (
+        AssociationChoice("Capteur X3D", "sensor_x3d"),
+        AssociationChoice("Détecteur X3D", "detector_x3d"),
+        AssociationChoice("Sonde de température X3D", "temperature_x3d"),
+        AssociationChoice("Station météo", "weather_plt"),
+    ),
+}
+
+# Official product-to-discovery mappings are kept separately from the
+# generic fallback recipes above. They are generated from the product catalog
+# bundled with the official TYDOM application, but only the small, declarative
+# association facts are versioned here (never the APK itself).
+OFFICIAL_DISCOVERY_PROFILES: dict[str, DiscoveryProfile] = {
+    "official:aeraulic_ZIGBEE": DiscoveryProfile("aeraulic_ZIGBEE", "ZIGBEE", "", "aeraulic"),
+    "official:alarm_X3D_x2d_a": DiscoveryProfile("alarm_X3D_x2d_a", "X3D", "x2d_a", "alarm"),
+    "official:alarm_X3D_x3d_ppa": DiscoveryProfile("alarm_X3D_x3d_ppa", "X3D", "x3d_ppa", "alarm"),
+    "official:awning_X3D_x3d_rm": DiscoveryProfile("awning_X3D_x3d_rm", "X3D", "x3d_rm", "awning"),
+    "official:detector_X3D_direct": DiscoveryProfile("detector_X3D_direct", "X3D", "direct", "detector"),
+    "official:electric_ZIGBEE": DiscoveryProfile("electric_ZIGBEE", "ZIGBEE", "", "electric"),
+    "official:generic_X3D_x3d_pp": DiscoveryProfile("generic_X3D_x3d_pp", "X3D", "x3d_pp", "generic"),
+    "official:light_X3D_x3d_rm": DiscoveryProfile("light_X3D_x3d_rm", "X3D", "x3d_rm", "light"),
+    "official:light_ZIGBEE": DiscoveryProfile("light_ZIGBEE", "ZIGBEE", "", "light"),
+    "official:meter_X3D_direct": DiscoveryProfile("meter_X3D_direct", "X3D", "direct", "meter"),
+    "official:multi_X3D_x3d_pped": DiscoveryProfile("multi_X3D_x3d_pped", "X3D", "x3d_pped", "multi"),
+    "official:opening_x3d_x3d_rm": DiscoveryProfile("opening_x3d_x3d_rm", "X3D", "x3d_rm", "opening"),
+    "official:pod_X3D_x3d_rm": DiscoveryProfile("pod_X3D_x3d_rm", "X3D", "x3d_rm", "pod"),
+    "official:remote_X3D_direct": DiscoveryProfile("remote_X3D_direct", "X3D", "direct", "remote"),
+    "official:rt2012_meas_X3D_x3d_pped": DiscoveryProfile("rt2012_meas_X3D_x3d_pped", "X3D", "x3d_pped", "rt2012_meas"),
+    "official:rt2012_noOutTemp_X3D_x3d_pped": DiscoveryProfile("rt2012_noOutTemp_X3D_x3d_pped", "X3D", "x3d_pped", "rt2012_noOutTemp"),
+    "official:rt2012_X3D_x3d_pped": DiscoveryProfile("rt2012_X3D_x3d_pped", "X3D", "x3d_pped", "rt2012"),
+    "official:sensor_X3D_direct": DiscoveryProfile("sensor_X3D_direct", "X3D", "direct", "sensor"),
+    "official:shThermic_X3D_x3d_rmloop": DiscoveryProfile("shThermic_X3D_x3d_rmloop", "X3D", "x3d_rmloop", "shThermic"),
+    "official:shutter_X3D_x3d_rm": DiscoveryProfile("shutter_X3D_x3d_rm", "X3D", "x3d_rm", "shutter"),
+    "official:shutter_X3D_x3d_rmlp": DiscoveryProfile("shutter_X3D_x3d_rmlp", "X3D", "x3d_rmlp", "shutter"),
+    "official:shutter_ZIGBEE": DiscoveryProfile("shutter_ZIGBEE", "ZIGBEE", "", "shutter"),
+    "official:shutter_ZIGBEE_PROFALUX": DiscoveryProfile("shutter_ZIGBEE_PROFALUX", "ZIGBEE", "PROFALUX", "shutter"),
+    "official:shutter_ZIGBEE_STELLA": DiscoveryProfile("shutter_ZIGBEE_STELLA", "ZIGBEE", "", "shutter"),
+    "official:shutterActivHome_X3D_x3d_rm": DiscoveryProfile("shutterActivHome_X3D_x3d_rm", "X3D", "x3d_rm", "shutterActivHome"),
+    "official:shutterBrushless_X3D_x3d_rm": DiscoveryProfile("shutterBrushless_X3D_x3d_rm", "X3D", "x3d_rm", "shutterBrushless"),
+    "official:shutterProjected_X3D_x3d_rm": DiscoveryProfile("shutterProjected_X3D_x3d_rm", "X3D", "x3d_rm", "shutterProjected"),
+    "official:temperature_X3D_direct": DiscoveryProfile("temperature_X3D_direct", "X3D", "direct", "temperature"),
+    "official:thermic_X3D_x2d_d": DiscoveryProfile("thermic_X3D_x2d_d", "X3D", "x2d_d", "thermic"),
+    "official:thermic_X3D_x3d_pps": DiscoveryProfile("thermic_X3D_x3d_pps", "X3D", "x3d_pps", "controller"),
+    "official:thermic_X3D_x3d_rm": DiscoveryProfile("thermic_X3D_x3d_rm", "X3D", "x3d_rm", "thermic"),
+    "official:thermic_X3D_x3d_rm_drive": DiscoveryProfile("thermic_X3D_x3d_rm_drive", "X3D", "x3d_rm", "boilerDrive"),
+    "official:thermic_X3D_x3d_rm_es": DiscoveryProfile("thermic_X3D_x3d_rm_es", "X3D", "x3d_rm", "thermicES"),
+    "official:thermic_ZIGBEE": DiscoveryProfile("thermic_ZIGBEE", "ZIGBEE", "", "thermic"),
+    "official:typassATL_X3D_direct": DiscoveryProfile("typassATL_X3D_direct", "X3D", "direct", "typassAtl"),
+    "official:typassSaunier_X3D_direct": DiscoveryProfile("typassSaunier_X3D_direct", "X3D", "direct", "typassSaunier"),
+    "official:weather_plt": DiscoveryProfile("weather_plt", "PltService", "", "weather"),
+}
+
+OFFICIAL_ASSOCIATION_CATALOG: dict[str, tuple[AssociationChoice, ...]] = {
+    "Volets": (
+        AssociationChoice("ACTIVE HOME KLINE", "official:shutter_X3D_x3d_rm"),
+        AssociationChoice("BRISE SOLEIL WELLCOM", "official:shutter_X3D_x3d_rm"),
+        AssociationChoice("BRISE SOLEIL ZIGBEE", "official:shutter_ZIGBEE_PROFALUX"),
+        AssociationChoice("BSO KLINE", "official:shutter_X3D_x3d_rm"),
+        AssociationChoice("KLINE TYMOOV SOLAR", "official:shutter_X3D_x3d_rmlp"),
+        AssociationChoice("PROFALUX BRANDS", "official:shutter_ZIGBEE_PROFALUX"),
+        AssociationChoice("PROFALUX STELLA SHUTTER", "official:shutter_ZIGBEE_STELLA"),
+        AssociationChoice("ROLLIA RADIO", "official:shutter_X3D_x3d_rm"),
+        AssociationChoice("SHUTTER TYMOOV SOLAR", "official:shutter_X3D_x3d_rmlp"),
+        AssociationChoice("STORE VERTICAL ZIGBEE", "official:shutter_ZIGBEE_PROFALUX"),
+        AssociationChoice("TYMOOV RADIO", "official:shutterBrushless_X3D_x3d_rm"),
+        AssociationChoice("TYXIA 4630", "official:shutter_X3D_x3d_rm"),
+        AssociationChoice("TYXIA 4730", "official:shutter_X3D_x3d_rm"),
+        AssociationChoice("TYXIA 4731", "official:shutter_X3D_x3d_rm"),
+        AssociationChoice("TYXIA 5630", "official:shutter_X3D_x3d_rm"),
+        AssociationChoice("TYXIA 5730", "official:shutter_X3D_x3d_rm"),
+        AssociationChoice("TYXIA 5731", "official:shutter_X3D_x3d_rm"),
+        AssociationChoice("VLO BUBENDORFF SHUTTER", "official:shutter_ZIGBEE"),
+        AssociationChoice("VOLET BATTANT WELLCOM", "official:shutter_X3D_x3d_rm"),
+        AssociationChoice("VOLET KLINE", "official:shutter_X3D_x3d_rm"),
+        AssociationChoice("VOLET PROJECTION WELLCOM", "official:shutterProjected_X3D_x3d_rm"),
+        AssociationChoice("VOLET ROULANT WELLCOM", "official:shutter_X3D_x3d_rm"),
+        AssociationChoice("VOLET ROULANT WELLCOM SOLAR", "official:shutter_X3D_x3d_rmlp"),
+        AssociationChoice("VOLET ROULANT ZIGBEE", "official:shutter_ZIGBEE_PROFALUX"),
+        AssociationChoice("VR BUBENDORFF SHUTTER", "official:shutter_ZIGBEE"),
+    ),
+    "Éclairages": (
+        AssociationChoice("BULB DELTA DORE", "official:light_ZIGBEE"),
+        AssociationChoice("BULB GENERIQUE", "official:light_ZIGBEE"),
+        AssociationChoice("TYXIA 4600", "official:light_X3D_x3d_rm"),
+        AssociationChoice("TYXIA 4610", "official:light_X3D_x3d_rm"),
+        AssociationChoice("TYXIA 4801", "official:light_X3D_x3d_rm"),
+        AssociationChoice("TYXIA 4811", "official:light_X3D_x3d_rm"),
+        AssociationChoice("TYXIA 4840", "official:light_X3D_x3d_rm"),
+        AssociationChoice("TYXIA 4850", "official:light_X3D_x3d_rm"),
+        AssociationChoice("TYXIA 4860", "official:light_X3D_x3d_rm"),
+        AssociationChoice("TYXIA 4910", "official:light_X3D_x3d_rm"),
+        AssociationChoice("TYXIA 4940", "official:light_X3D_x3d_rm"),
+        AssociationChoice("TYXIA 5610", "official:light_X3D_x3d_rm"),
+        AssociationChoice("TYXIA 5612", "official:light_X3D_x3d_rm"),
+        AssociationChoice("TYXIA 5640", "official:light_X3D_x3d_rm"),
+        AssociationChoice("TYXIA 5650", "official:light_X3D_x3d_rm"),
+        AssociationChoice("TYXIA 6410", "official:light_X3D_x3d_rm"),
+        AssociationChoice("TYXIA 6610", "official:light_X3D_x3d_rm"),
+    ),
+    "Thermique": (
+        AssociationChoice("ALLAUVE KONECT", "official:thermic_X3D_x3d_rm"),
+        AssociationChoice("ATLANTIC", "official:thermic_X3D_x3d_rm"),
+        AssociationChoice("CALYBOX 1020 WT", "official:rt2012_noOutTemp_X3D_x3d_pped"),
+        AssociationChoice("CALYBOX 2020 WT", "official:rt2012_X3D_x3d_pped"),
+        AssociationChoice("CALYBOX 210", "official:thermic_X3D_x2d_d"),
+        AssociationChoice("CALYBOX 220", "official:thermic_X3D_x2d_d"),
+        AssociationChoice("CALYBOX 220 WT", "official:thermic_X3D_x2d_d"),
+        AssociationChoice("CALYBOX 230", "official:thermic_X3D_x2d_d"),
+        AssociationChoice("CALYBOX 230 WT", "official:thermic_X3D_x2d_d"),
+        AssociationChoice("CALYBOX 320", "official:thermic_X3D_x2d_d"),
+        AssociationChoice("CALYBOX 320 WT", "official:thermic_X3D_x2d_d"),
+        AssociationChoice("CALYBOX 330", "official:thermic_X3D_x2d_d"),
+        AssociationChoice("CALYBOX 420", "official:thermic_X3D_x2d_d"),
+        AssociationChoice("CALYBOX 430", "official:thermic_X3D_x2d_d"),
+        AssociationChoice("DELTA 8000", "official:thermic_X3D_x3d_rm"),
+        AssociationChoice("HITACHI ATW", "official:thermic_X3D_x3d_rm_es"),
+        AssociationChoice("HOMEPILOTE PURE", "official:thermic_X3D_x3d_rm_es"),
+        AssociationChoice("MINOR 1000", "official:thermic_X3D_x3d_rm"),
+        AssociationChoice("MULTIZONE KIT", "official:thermic_X3D_x3d_rm"),
+        AssociationChoice("NAVILINK PAC", "official:thermic_ZIGBEE"),
+        AssociationChoice("NAVILINK PAC BOILER", "official:thermic_ZIGBEE"),
+        AssociationChoice("NSC RF ELM Leblanc", "official:thermic_X3D_x3d_rm"),
+        AssociationChoice("PARTNER HVAC", "official:thermic_X3D_x3d_rm"),
+        AssociationChoice("RADIO TYBOX 810 (RF 640)", "official:thermic_X3D_x2d_d"),
+        AssociationChoice("RADIO TYBOX 811 (RF 640)", "official:thermic_X3D_x2d_d"),
+        AssociationChoice("RF 4890", "official:thermic_X3D_x3d_rm"),
+        AssociationChoice("RF 6050+", "official:thermic_X3D_x3d_rm_es"),
+        AssociationChoice("RF 6600 FP", "official:thermic_X3D_x3d_rm"),
+        AssociationChoice("RF 6620", "official:thermic_X3D_x3d_rm"),
+        AssociationChoice("RF 6630", "official:thermic_X3D_x3d_rm"),
+        AssociationChoice("RF 6640", "official:thermic_X3D_x3d_rm"),
+        AssociationChoice("RF 6650", "official:thermic_X3D_x3d_rm"),
+        AssociationChoice("RF 6700 FP", "official:thermic_X3D_x3d_rm_es"),
+        AssociationChoice("RF 7110", "official:thermic_X3D_x3d_rm_es"),
+        AssociationChoice("RF 7130", "official:thermic_X3D_x3d_rm_es"),
+        AssociationChoice("RF 7210", "official:thermic_X3D_x3d_rm_es"),
+        AssociationChoice("SPLIT TAKAO", "official:aeraulic_ZIGBEE"),
+        AssociationChoice("TA 5555 ZIGBEE DD", "official:electric_ZIGBEE"),
+        AssociationChoice("TA 5555 ZIGBEE OTHERS", "official:electric_ZIGBEE"),
+        AssociationChoice("THERMOSTAT ATLANTIC", "official:temperature_X3D_direct"),
+        AssociationChoice("THERMOSTAT DELTA 8000", "official:temperature_X3D_direct"),
+        AssociationChoice("THERMOSTAT MULTIZONE KIT", "official:temperature_X3D_direct"),
+        AssociationChoice("TRV 1.0", "official:shThermic_X3D_x3d_rmloop"),
+        AssociationChoice("TRV 2", "official:thermic_ZIGBEE"),
+        AssociationChoice("TYBOX 1010 WT", "official:rt2012_noOutTemp_X3D_x3d_pped"),
+        AssociationChoice("TYBOX 1137 (RF6000+)", "official:thermic_X3D_x3d_rm_es"),
+        AssociationChoice("TYBOX 137 (RF 640)", "official:thermic_X3D_x2d_d"),
+        AssociationChoice("TYBOX 137+ (RF6000+)", "official:thermic_X3D_x3d_rm_es"),
+        AssociationChoice("TYBOX 2010 WT", "official:rt2012_X3D_x3d_pped"),
+        AssociationChoice("TYBOX 2300 (RF 6000+)", "official:thermic_X3D_x3d_rm_es"),
+        AssociationChoice("TYBOX 237 (RF 640)", "official:thermic_X3D_x2d_d"),
+        AssociationChoice("TYBOX 337 (RF 640)", "official:thermic_X3D_x2d_d"),
+        AssociationChoice("TYBOX 4100", "official:thermic_X3D_x3d_rm"),
+        AssociationChoice("TYBOX 4110", "official:thermic_X3D_x3d_rm"),
+        AssociationChoice("TYBOX 4150", "official:thermic_X3D_x3d_rm"),
+        AssociationChoice("TYBOX 4210", "official:thermic_X3D_x3d_rm"),
+        AssociationChoice("TYBOX 4250", "official:thermic_X3D_x3d_rm"),
+        AssociationChoice("TYBOX 5000", "official:multi_X3D_x3d_pped"),
+        AssociationChoice("TYBOX 5100 (RF 6000)", "official:thermic_X3D_x3d_rm"),
+        AssociationChoice("TYBOX 5150 (RF 6200)", "official:thermic_X3D_x3d_rm"),
+        AssociationChoice("TYBOX 5200 (RF 6050)", "official:thermic_X3D_x3d_rm"),
+        AssociationChoice("TYBOX 5300 (RF 6050+)", "official:thermic_X3D_x3d_rm_es"),
+        AssociationChoice("TYBOX 5701 FP (RF 6700 FP)", "official:thermic_X3D_x3d_rm_es"),
+        AssociationChoice("TYBOX 5702 FP (2 x RF 6700 FP)", "official:thermic_X3D_x3d_rm_es"),
+        AssociationChoice("TYBOX HOME RF 210 (RF 7210)", "official:thermic_X3D_x3d_rm_es"),
+        AssociationChoice("TYBOX RF 110 (RF 7110)", "official:thermic_X3D_x3d_rm_es"),
+        AssociationChoice("TYBOX RF 130 (RF 7130)", "official:thermic_X3D_x3d_rm_es"),
+        AssociationChoice("TYBOX RF 210 (RF 7210)", "official:thermic_X3D_x3d_rm_es"),
+        AssociationChoice("TYBOX RF 210 XL (RF 7210)", "official:thermic_X3D_x3d_rm_es"),
+        AssociationChoice("TYPASS ATL", "official:thermic_X3D_x3d_rm"),
+        AssociationChoice("TYPASS CHX", "official:thermic_X3D_x3d_rm"),
+        AssociationChoice("TYPASS SD", "official:thermic_X3D_x3d_rm"),
+        AssociationChoice("Tywell 2050 (RF 6050+)", "official:thermic_X3D_x3d_rm_es"),
+        AssociationChoice("Tywell 2050 L (RF 6050+)", "official:thermic_X3D_x3d_rm_es"),
+    ),
+    "Garage": (
+        AssociationChoice("GARAGE HORIZONTAL WELLCOM", "official:light_X3D_x3d_rm"),
+        AssociationChoice("GARAGE VERTICAL WELLCOM", "official:light_X3D_x3d_rm"),
+        AssociationChoice("HORMANN SupraMatic", "official:light_X3D_x3d_rm"),
+        AssociationChoice("NOVOFERM Novomatic 423", "official:light_X3D_x3d_rm"),
+        AssociationChoice("NOVOFERM Novomatic 563", "official:light_X3D_x3d_rm"),
+        AssociationChoice("NOVOFERM Novoport", "official:light_X3D_x3d_rm"),
+        AssociationChoice("ROLLIA RADIO", "official:shutter_X3D_x3d_rm"),
+        AssociationChoice("SOMMER ROLLER DOOR CONTROL UNIT", "official:light_X3D_x3d_rm"),
+        AssociationChoice("SOMMER S 90XX HORIZONTAL", "official:light_X3D_x3d_rm"),
+        AssociationChoice("SOMMER S 90XX VERTICAL", "official:light_X3D_x3d_rm"),
+        AssociationChoice("TUBAUTO Procom 10-3", "official:light_X3D_x3d_rm"),
+        AssociationChoice("TUBAUTO Procom 10-4", "official:light_X3D_x3d_rm"),
+        AssociationChoice("TUBAUTO Procom 20-3", "official:light_X3D_x3d_rm"),
+        AssociationChoice("TUBAUTO Procom 20-4", "official:light_X3D_x3d_rm"),
+        AssociationChoice("TYMOOV RADIO", "official:shutterBrushless_X3D_x3d_rm"),
+        AssociationChoice("TYXIA 4620", "official:light_X3D_x3d_rm"),
+        AssociationChoice("TYXIA 4630", "official:shutter_X3D_x3d_rm"),
+        AssociationChoice("TYXIA 4730", "official:shutter_X3D_x3d_rm"),
+        AssociationChoice("TYXIA 5630", "official:shutter_X3D_x3d_rm"),
+        AssociationChoice("TYXIA 5730", "official:shutter_X3D_x3d_rm"),
+        AssociationChoice("TYXIA 6410", "official:light_X3D_x3d_rm"),
+        AssociationChoice("WELLCOM ROLLER DOOR CONTROL UNIT", "official:light_X3D_x3d_rm"),
+        AssociationChoice("WELLCOM S 90XX HORIZONTAL", "official:light_X3D_x3d_rm"),
+        AssociationChoice("WELLCOM S 90XX VERTICAL", "official:light_X3D_x3d_rm"),
+    ),
+    "Portail": (
+        AssociationChoice("SOMMER STARTER S 2 COULISSANT", "official:light_X3D_x3d_rm"),
+        AssociationChoice("TYXIA 4620", "official:light_X3D_x3d_rm"),
+        AssociationChoice("TYXIA 6410", "official:light_X3D_x3d_rm"),
+    ),
+    "Alarme": (
+        AssociationChoice("CSTX 50", "official:alarm_X3D_x2d_a"),
+        AssociationChoice("CSX 20", "official:alarm_X3D_x2d_a"),
+        AssociationChoice("CSX 40", "official:alarm_X3D_x2d_a"),
+        AssociationChoice("CTX 60", "official:alarm_X3D_x2d_a"),
+        AssociationChoice("DELTAL 2.00", "official:alarm_X3D_x2d_a"),
+        AssociationChoice("DELTAL 2.10", "official:alarm_X3D_x2d_a"),
+        AssociationChoice("DELTAL 2.15", "official:alarm_X3D_x2d_a"),
+        AssociationChoice("DELTAL 2.50", "official:alarm_X3D_x2d_a"),
+        AssociationChoice("DELTAL 3.00", "official:alarm_X3D_x2d_a"),
+        AssociationChoice("DELTAL 4.00", "official:alarm_X3D_x2d_a"),
+        AssociationChoice("DELTAL 4.50", "official:alarm_X3D_x2d_a"),
+        AssociationChoice("DELTAL 7.00", "official:alarm_X3D_x2d_a"),
+        AssociationChoice("EVOLOGY 2 ZONES", "official:alarm_X3D_x2d_a"),
+        AssociationChoice("EVOLOGY 4 ZONES", "official:alarm_X3D_x2d_a"),
+        AssociationChoice("HUB ALARM", "official:alarm_X3D_x3d_ppa"),
+        AssociationChoice("KIT EVOLUTYX 26", "official:alarm_X3D_x2d_a"),
+        AssociationChoice("KIT HABITAT 10", "official:alarm_X3D_x2d_a"),
+        AssociationChoice("KIT HABITAT 20", "official:alarm_X3D_x2d_a"),
+        AssociationChoice("KIT TYXAL 20", "official:alarm_X3D_x2d_a"),
+        AssociationChoice("KIT TYXAL 30", "official:alarm_X3D_x2d_a"),
+        AssociationChoice("KIT TYXAL 5", "official:alarm_X3D_x2d_a"),
+        AssociationChoice("KIT TYXAL 50", "official:alarm_X3D_x2d_a"),
+        AssociationChoice("KIT TYXAL 51", "official:alarm_X3D_x2d_a"),
+        AssociationChoice("KIT TYXAL 70", "official:alarm_X3D_x2d_a"),
+        AssociationChoice("KIT TYXAL 71", "official:alarm_X3D_x2d_a"),
+        AssociationChoice("PACK TYXAL APPARTEMENT", "official:alarm_X3D_x2d_a"),
+        AssociationChoice("PACK TYXAL MAISON", "official:alarm_X3D_x2d_a"),
+        AssociationChoice("PACK TYXAL MAISON ANIMAUX", "official:alarm_X3D_x2d_a"),
+        AssociationChoice("TYXAL PLUS PACK CS 8000", "official:alarm_X3D_x3d_ppa"),
+        AssociationChoice("TYXAL PLUS VIRGIN", "official:alarm_X3D_x3d_ppa"),
+        AssociationChoice("TYXAL PLUS WITH CLT 8000", "official:alarm_X3D_x3d_ppa"),
+        AssociationChoice("TYXAL PLUS WITH TL 2000", "official:alarm_X3D_x3d_ppa"),
+    ),
+    "Consommation": (
+        AssociationChoice("CALYBOX 1020 WT", "official:rt2012_noOutTemp_X3D_x3d_pped"),
+        AssociationChoice("CALYBOX 2020 WT", "official:rt2012_X3D_x3d_pped"),
+        AssociationChoice("EM.IC", "official:generic_X3D_x3d_pp"),
+        AssociationChoice("HITACHI ATW", "official:typassATL_X3D_direct"),
+        AssociationChoice("TYBOX 1010 WT", "official:rt2012_noOutTemp_X3D_x3d_pped"),
+        AssociationChoice("TYBOX 2000 WT", "official:rt2012_X3D_x3d_pped"),
+        AssociationChoice("TYBOX 2010 WT", "official:rt2012_X3D_x3d_pped"),
+        AssociationChoice("TYBOX 2020 WT", "official:rt2012_X3D_x3d_pped"),
+        AssociationChoice("TYPASS ATL", "official:typassATL_X3D_direct"),
+        AssociationChoice("TYPASS CHX", "official:typassATL_X3D_direct"),
+        AssociationChoice("TYPASS SD", "official:typassSaunier_X3D_direct"),
+        AssociationChoice("Tysense Thermo", "official:temperature_X3D_direct"),
+        AssociationChoice("TYWATT 1000", "official:rt2012_noOutTemp_X3D_x3d_pped"),
+        AssociationChoice("TYWATT 2000", "official:rt2012_X3D_x3d_pped"),
+        AssociationChoice("TYWATT 5100", "official:meter_X3D_direct"),
+        AssociationChoice("TYWATT 5400", "official:generic_X3D_x3d_pp"),
+        AssociationChoice("TYWATT 5450", "official:generic_X3D_x3d_pp"),
+        AssociationChoice("TYWATT 5600", "official:generic_X3D_x3d_pp"),
+    ),
+    "Porte": (
+        AssociationChoice("CAPTEUR CPA", "official:detector_X3D_direct"),
+        AssociationChoice("DETECTEUR OUVERTURE", "official:detector_X3D_direct"),
+        AssociationChoice("DETECTEUR VERROUILLAGE DVI", "official:detector_X3D_direct"),
+        AssociationChoice("I-SECURE (CPA)", "official:detector_X3D_direct"),
+        AssociationChoice("POD", "official:pod_X3D_x3d_rm"),
+        AssociationChoice("PORTE BELEM", "official:pod_X3D_x3d_rm"),
+    ),
+    "Fenêtres": (
+        AssociationChoice("CAPTEUR CPA", "official:detector_X3D_direct"),
+        AssociationChoice("DETECTEUR OUVERTURE", "official:detector_X3D_direct"),
+        AssociationChoice("DETECTEUR VERROUILLAGE DVI SLIDING", "official:detector_X3D_direct"),
+        AssociationChoice("DETECTEUR VERROUILLAGE DVI SWING", "official:detector_X3D_direct"),
+        AssociationChoice("I-SECURE (CPA)", "official:detector_X3D_direct"),
+        AssociationChoice("USAGE DETECT WINDOW FPI", "official:opening_x3d_x3d_rm"),
+    ),
+    "Stores": (
+        AssociationChoice("PROFALUX STELLA STORE", "official:shutter_ZIGBEE_STELLA"),
+        AssociationChoice("ROLLIA RADIO", "official:shutter_X3D_x3d_rm"),
+        AssociationChoice("STORE WELLCOM", "official:shutter_X3D_x3d_rm"),
+        AssociationChoice("TYMOOV RADIO", "official:shutterBrushless_X3D_x3d_rm"),
+        AssociationChoice("TYXIA 4630", "official:shutter_X3D_x3d_rm"),
+        AssociationChoice("TYXIA 4730", "official:shutter_X3D_x3d_rm"),
+        AssociationChoice("TYXIA 4731", "official:shutter_X3D_x3d_rm"),
+        AssociationChoice("TYXIA 5630", "official:shutter_X3D_x3d_rm"),
+        AssociationChoice("TYXIA 5730", "official:shutter_X3D_x3d_rm"),
+        AssociationChoice("TYXIA 5731", "official:shutter_X3D_x3d_rm"),
+    ),
+    "Prise": (
+        AssociationChoice("SMART PLUG DELTA DORE", "official:light_ZIGBEE"),
+        AssociationChoice("SMART PLUG GENERIQUE", "official:light_ZIGBEE"),
+    ),
+    "Autres": (
+        AssociationChoice("TYXIA 4600", "official:light_X3D_x3d_rm"),
+        AssociationChoice("TYXIA 4610", "official:light_X3D_x3d_rm"),
+        AssociationChoice("TYXIA 4620", "official:light_X3D_x3d_rm"),
+        AssociationChoice("TYXIA 4801", "official:light_X3D_x3d_rm"),
+        AssociationChoice("TYXIA 4811", "official:light_X3D_x3d_rm"),
+        AssociationChoice("TYXIA 4840", "official:light_X3D_x3d_rm"),
+        AssociationChoice("TYXIA 4850", "official:light_X3D_x3d_rm"),
+        AssociationChoice("TYXIA 4860", "official:light_X3D_x3d_rm"),
+        AssociationChoice("TYXIA 4910", "official:light_X3D_x3d_rm"),
+        AssociationChoice("TYXIA 4940", "official:light_X3D_x3d_rm"),
+        AssociationChoice("TYXIA 5610", "official:light_X3D_x3d_rm"),
+        AssociationChoice("TYXIA 5612", "official:light_X3D_x3d_rm"),
+        AssociationChoice("TYXIA 5640", "official:light_X3D_x3d_rm"),
+        AssociationChoice("TYXIA 5650", "official:light_X3D_x3d_rm"),
+        AssociationChoice("TYXIA 6410", "official:light_X3D_x3d_rm"),
+    ),
+    "Télécommandes et claviers": (
+        AssociationChoice("CLE 8000", "official:remote_X3D_direct"),
+        AssociationChoice("TL 2000", "official:remote_X3D_direct"),
+        AssociationChoice("TYXIA 1410", "official:remote_X3D_direct"),
+    ),
+    "Interrupteurs": (
+        AssociationChoice("TYXIA 2310", "official:remote_X3D_direct"),
+        AssociationChoice("TYXIA 2600", "official:remote_X3D_direct"),
+        AssociationChoice("TYXIA 2700", "official:remote_X3D_direct"),
+    ),
+    "Capteurs": (
+        AssociationChoice("SENSOR STI 2000", "official:sensor_X3D_direct"),
+        AssociationChoice("TYBOX CONTROL", "official:sensor_X3D_direct"),
+        AssociationChoice("TYBOX CONTROL XL", "official:sensor_X3D_direct"),
+        AssociationChoice("Tysense Sun", "official:sensor_X3D_direct"),
+        AssociationChoice("Tysense Thermo", "official:temperature_X3D_direct"),
+        AssociationChoice("USAGE SENSOR DF", "official:detector_X3D_direct"),
+        AssociationChoice("USAGE SENSOR DFR", "official:detector_X3D_direct"),
+        AssociationChoice("USAGE WEATHER", "official:weather_plt"),
+    ),
+}
+
+
+def get_association_choices(category: str) -> tuple[AssociationChoice, ...]:
+    """Return official models followed by generic fallback recipes."""
+    official = OFFICIAL_ASSOCIATION_CATALOG.get(category, ())
+    fallback = ASSOCIATION_CATALOG.get(category, ())
+    if not official and not fallback:
+        raise ValueError(f"Unknown TYDOM association category: {category}")
+
+    # A model can appear in multiple app catalog groups. HA Select options must
+    # remain unique while preserving the official catalog ordering.
+    return tuple({choice.label: choice for choice in (*official, *fallback)}.values())
+
+
+def get_install_payload(
+    profile_id: str, network: int | None = None
+) -> dict[str, str | int]:
+    """Build a validated ``POST /devices`` discovery request body."""
+    try:
+        profile = DISCOVERY_PROFILES.get(profile_id) or OFFICIAL_DISCOVERY_PROFILES[
+            profile_id
+        ]
+    except KeyError as err:
+        raise ValueError(f"Unknown TYDOM discovery profile: {profile_id}") from err
+    payload: dict[str, str | int] = {
+        "protocol": profile.protocol,
+        "type": profile.type,
+        "profile": profile.profile,
+    }
+    if network is not None:
+        if network < 0:
+            raise ValueError("TYDOM network must be a non-negative integer")
+        payload["net"] = network
+    elif profile.protocol == "ZIGBEE":
+        payload["net"] = 0
+    return payload
+
+
+async def start_product_association(
+    tydom_hub, profile_id: str, network: int | None = None
+) -> dict[str, str | int]:
+    """Start association through the physical gateway's LAN connection."""
+    payload = get_install_payload(profile_id, network)
+    local_hub = _get_local_association_hub(tydom_hub)
+    await local_hub._tydom_client.post_device_discovery(payload)
+    return payload
+
+
+def _normalized_gateway_mac(gateway_mac: object) -> str:
+    """Return a comparison-safe gateway MAC address."""
+    return "".join(
+        character for character in str(gateway_mac) if character.isalnum()
+    ).upper()
+
+
+def _get_local_association_hub(tydom_hub):
+    """Prefer the matching LAN entry when the selected entry uses mediation.
+
+    Radio discovery is a gateway-local operation. A user can legitimately have
+    several distinct TYDOM installations in Home Assistant, so only an entry
+    with the *same gateway MAC* may replace the selected entry. Keep the
+    selected connection when there is no unambiguous local match: the official
+    cloud workflow must keep working for cloud-only installations.
+    """
+    tydom_client = getattr(tydom_hub, "_tydom_client", None)
+    if tydom_client is None:
+        raise ValueError("The selected TYDOM gateway has no active client")
+    if not getattr(tydom_client, "_remote_mode", False):
+        return tydom_hub
+
+    hass = getattr(tydom_hub, "_hass", None)
+    gateway_mac = _normalized_gateway_mac(getattr(tydom_hub, "_mac", ""))
+    if hass is not None and gateway_mac:
+        local_hubs = [
+            hub
+            for hub in getattr(hass, "data", {}).get(DOMAIN, {}).values()
+            if _normalized_gateway_mac(getattr(hub, "_mac", "")) == gateway_mac
+            and not getattr(getattr(hub, "_tydom_client", None), "_remote_mode", True)
+        ]
+        if len(local_hubs) == 1:
+            return local_hubs[0]
+
+    return tydom_hub
+
+
+async def remove_product_association(device) -> None:
+    """Remove one already-associated product from its TYDOM gateway."""
+    device_id = getattr(device, "_id", None)
+    tydom_client = getattr(device, "_tydom_client", None)
+    if device_id is None or tydom_client is None:
+        raise ValueError("The selected entity does not expose a TYDOM device")
+    await tydom_client.delete_device(device_id)
 
 
 class Hub:
@@ -147,7 +761,14 @@ class Hub:
 
         self.online = True
         self._reload_button_created = False
+        self._association_controls_created = False
+        self._association_controls: list = []
+        self._association_category = next(iter(ASSOCIATION_CATALOG))
+        first_choice = get_association_choices(self._association_category)[0]
+        self._association_product = first_choice.label
+        self._association_profile = first_choice.profile_id
         self._refresh_energy_buttons_created: set[str] = set()
+        self._device_association_buttons_created: set[tuple[str, str]] = set()
         self._remote_battery_entities: dict[str, HARemoteBattery] = {}
         self._interrupter_battery_entities: dict[str, HAInterrupterBattery] = {}
         self._twc_scene_sets: dict[str, dict[str, HAScene]] = {}
@@ -246,6 +867,49 @@ class Hub:
                     "Timed out closing Tydom websocket after credential test"
                 )
 
+    async def async_set_local_gateway_password(
+        self, password: str, local_host: str | None = None
+    ) -> None:
+        """Change the local authentication secret, optionally via a LAN host."""
+        if not self._tydom_client._remote_mode or not local_host:
+            await self._tydom_client.async_set_local_gateway_password(password)
+            self._pass = password
+            return
+
+        # The configured connection may use Delta Dore mediation, while this
+        # endpoint is deliberately LAN-only. Reuse its already retrieved
+        # gateway credential for one short-lived direct connection instead of
+        # requiring the user to remove and reconfigure the integration.
+        local_client = TydomClient(
+            hass=self._hass,
+            id=self._id,
+            mac=self._mac,
+            host=local_host,
+            password=self._pass,
+            zone_home=self._zone_home,
+            zone_away=self._zone_away,
+            zone_night=self._zone_night,
+            alarm_pin=self._pin,
+        )
+        connection = await local_client.async_connect()
+        local_client._connection = connection
+        local_client._connection_ready = True
+
+        async def consume_responses() -> None:
+            while not local_client._shutting_down:
+                await local_client.consume_messages()
+
+        consumer_task = asyncio.create_task(consume_responses())
+        try:
+            await local_client.async_set_local_gateway_password(password)
+        finally:
+            consumer_task.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await consumer_task
+            await local_client.async_disconnect()
+
+        self._pass = password
+
     def ready(self) -> bool:
         """Check if we're ready to work."""
         # and self.add_alarm_callback is not None
@@ -276,7 +940,135 @@ class Hub:
             self.add_button_callback([reload_button])
             self._reload_button_created = True
             LOGGER.debug("Bouton de rechargement créé")
+        if (
+            is_ready
+            and not self._association_controls_created
+            and self.add_button_callback is not None
+            and self.add_select_callback is not None
+        ):
+            self.add_select_callback(
+                [
+                    HAGatewayAssociationCategorySelect(self),
+                    HAGatewayAssociationProductSelect(self),
+                    HAGatewayAssociationUsageSelect(self),
+                ]
+            )
+            self.add_button_callback([HAGatewayStartAssociationButton(self)])
+            self._association_controls_created = True
+            LOGGER.debug("Gateway product-association controls created")
         return is_ready
+
+    @property
+    def association_categories(self) -> tuple[str, ...]:
+        """Return the usage categories offered by gateway association."""
+        return tuple(ASSOCIATION_CATALOG)
+
+    @property
+    def association_category(self) -> str:
+        """Return the currently selected association category."""
+        return self._association_category
+
+    @property
+    def association_product_labels(self) -> tuple[str, ...]:
+        """Return product families for the selected category."""
+        return tuple(
+            choice.label
+            for choice in get_association_choices(self._association_category)
+        )
+
+    @property
+    def association_product_label(self) -> str:
+        """Return the label of the currently selected product family."""
+        return self._association_product
+
+    @property
+    def association_usage_labels(self) -> tuple[str, ...]:
+        """Return only the official application usages for the selected model."""
+        return tuple(
+            category
+            for category in ASSOCIATION_CATALOG
+            if any(
+                choice.label == self._association_product
+                for choice in get_association_choices(category)
+            )
+        )
+
+    @property
+    def association_usage_label(self) -> str:
+        """Return the currently selected application usage."""
+        return self._association_category
+
+    @property
+    def association_product_supported(self) -> bool:
+        """Whether the current choice has a documented local install profile."""
+        return self._association_profile is not None
+
+    def register_association_control(self, entity) -> None:
+        """Register a gateway control that needs selection-state updates."""
+        if entity not in self._association_controls:
+            self._association_controls.append(entity)
+
+    def unregister_association_control(self, entity) -> None:
+        """Forget a gateway control removed by Home Assistant."""
+        if entity in self._association_controls:
+            self._association_controls.remove(entity)
+
+    def _notify_association_controls(self) -> None:
+        """Update the category/product controls after a selection change."""
+        for entity in self._association_controls:
+            entity.async_write_ha_state()
+
+    def set_association_category(self, category: str) -> None:
+        """Choose a category and retain the model when it is valid there."""
+        choices = get_association_choices(category)
+        self._association_category = category
+        choice = next(
+            (choice for choice in choices if choice.label == self._association_product),
+            choices[0],
+        )
+        self._association_product = choice.label
+        self._association_profile = choice.profile_id
+        self._notify_association_controls()
+
+    def set_association_product(self, label: str) -> None:
+        """Choose one product family from the current category."""
+        for choice in get_association_choices(self._association_category):
+            if choice.label == label:
+                self._association_product = label
+                self._association_profile = choice.profile_id
+                self._notify_association_controls()
+                return
+        raise ValueError(
+            f"{label!r} is not available for {self._association_category!r}"
+        )
+
+    def set_association_usage(self, category: str) -> None:
+        """Choose a documented usage compatible with the selected product."""
+        if category not in self.association_usage_labels:
+            raise ValueError(
+                f"{category!r} is not available for {self._association_product!r}"
+            )
+        choice = next(
+            choice
+            for choice in get_association_choices(category)
+            if choice.label == self._association_product
+        )
+        self._association_category = category
+        self._association_profile = choice.profile_id
+        self._notify_association_controls()
+
+    async def start_selected_product_association(self) -> None:
+        """Start association using the product selected in the gateway controls."""
+        if self._association_profile is None:
+            raise ValueError(
+                "The selected category has no documented local TYDOM install profile"
+            )
+        payload = await start_product_association(self, self._association_profile)
+        LOGGER.info(
+            "Started gateway association for %s on config entry %s",
+            payload,
+            self._entry.entry_id,
+        )
 
     def _add_discovered_entities(self, entities: list) -> None:
         """Add discovered entities to the platform matching their entity type."""
@@ -399,6 +1191,7 @@ class Hub:
 
         try:
             await factory(device)
+            self._maybe_create_device_association_buttons(device)
         except Exception as e:
             LOGGER.exception(
                 "Error creating HA device for %s (%s): %s",
@@ -631,7 +1424,10 @@ class Hub:
         if self.add_button_callback is not None:
             self.add_button_callback([HAAlarmAcknowledgeButton(device, self._hass)])
         self._add_discovered_entities(
-            [HAAlarmPendingEventsSensor(device, self._hass), *ha_device.get_sensors()]
+            [
+                HAAlarmPendingEventsSensor(device, self._hass),
+                *ha_device.get_sensors(),
+            ]
         )
 
     async def _create_weather_device(self, device: TydomWeather) -> None:
@@ -825,6 +1621,7 @@ class Hub:
                 self._add_discovered_entities(new_sensors)
             if isinstance(ha_device, HAEnergy):
                 self._maybe_create_refresh_energy_button(stored_device, ha_device)
+            self._maybe_create_device_association_buttons(stored_device)
             # ha_device.publish_updates()
             # ha_device.update()
         except KeyError as e:
@@ -837,6 +1634,35 @@ class Hub:
             LOGGER.exception(
                 "Erreur lors de la mise à jour du device %s", device.device_id
             )
+
+    def _maybe_create_device_association_buttons(self, device: TydomDevice) -> None:
+        """Expose association and opt-in permanent-removal product controls."""
+        if self.add_button_callback is None:
+            return
+
+        buttons = []
+        removal_key = (device.device_id, "remove_association")
+        if (
+            removal_key not in self._device_association_buttons_created
+            and getattr(device, "_id", None) is not None
+            and callable(
+                getattr(getattr(device, "_tydom_client", None), "delete_device", None)
+            )
+        ):
+            buttons.append(HADeviceRemovalButton(device, self._hass))
+            self._device_association_buttons_created.add(removal_key)
+
+        for command in (ASSOCIATION_COMMAND, IDENTIFY_COMMAND):
+            key = (device.device_id, command)
+            if key in self._device_association_buttons_created:
+                continue
+            if not supports_command(device, command):
+                continue
+            buttons.append(HADeviceAssociationButton(device, self._hass, command))
+            self._device_association_buttons_created.add(key)
+
+        if buttons:
+            self.add_button_callback(buttons)
 
     async def ping(self) -> None:
         """Periodically send pings."""
@@ -1009,7 +1835,10 @@ class Hub:
         self._twc_cover_entities.clear()
         # Réinitialiser le flag pour recréer le bouton après le rechargement
         self._reload_button_created = False
+        self._association_controls_created = False
+        self._association_controls.clear()
         self._refresh_energy_buttons_created.clear()
+        self._device_association_buttons_created.clear()
 
         # Supprimer toutes les entités existantes via l'Entity Registry
         from homeassistant.helpers import entity_registry as er
@@ -1037,8 +1866,11 @@ class Hub:
         await self._tydom_client.post_refresh()
         await self._tydom_client.get_configs_file()
         await self._tydom_client.get_groups()
-        await self._tydom_client.get_devices_meta()
-        await self._tydom_client.get_devices_cmeta()
+        # Association and removal change the gateway inventory. A user-triggered
+        # reload must bypass the one-hour metadata cache or newly associated
+        # products remain invisible until that cache expires.
+        await self._tydom_client.get_devices_meta(force_refresh=True)
+        await self._tydom_client.get_devices_cmeta(force_refresh=True)
         await self._tydom_client.get_devices_data()
         await self._tydom_client.get_scenarii()
         await self._tydom_client.get_moments()
@@ -1050,6 +1882,19 @@ class Hub:
             reload_button = HAReloadButton(self, self._hass)
             self.add_button_callback([reload_button])
             LOGGER.debug("Bouton de rechargement recréé après le rechargement")
+        if (
+            self.add_button_callback is not None
+            and self.add_select_callback is not None
+        ):
+            self.add_select_callback(
+                [
+                    HAGatewayAssociationCategorySelect(self),
+                    HAGatewayAssociationProductSelect(self),
+                    HAGatewayAssociationUsageSelect(self),
+                ]
+            )
+            self.add_button_callback([HAGatewayStartAssociationButton(self)])
+            self._association_controls_created = True
 
         LOGGER.info(
             "Rechargement terminé, les nouveaux appareils seront découverts automatiquement"

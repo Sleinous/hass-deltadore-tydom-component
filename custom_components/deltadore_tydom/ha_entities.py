@@ -110,6 +110,7 @@ from .tydom.tydom_devices import (
     TydomRemoteControl,
     TydomInterrupter,
     TydomAlarmCommandError,
+    TydomOpenIssuesNotReadyError,
     get_twc_scene_action,
 )
 
@@ -128,6 +129,9 @@ _BINARY_FALSE_VALUES = frozenset({"0", "off", "false", "no"})
 _PROBLEM_ATTRIBUTE_MARKERS = ("defect", "empty", "intrusion")
 _BINARY_OPEN_STATES = frozenset({"LOCKED", "UNLOCKED"})
 _AUTOMATIC_ALARM_HISTORY_TIMEOUT = 10.0
+_REFUSED_ARMING_SETTLE_DELAY = 2.0
+_UNCONFIRMED_ARMING_SETTLE_DELAY = 6.0
+_OPEN_ISSUES_RETRY_DELAY = 2.0
 
 
 def normalize_binary_state(value: Any, *, allow_numeric: bool = False) -> bool | None:
@@ -220,6 +224,22 @@ def is_binary_attribute(
     )
 
 
+def _get_hub_for_tydom_device(hass: Any, device: Any):
+    """Return the hub that owns one device, even with several gateways."""
+    if hass is None:
+        return None
+    hubs = getattr(hass, "data", {}).get(DOMAIN, {})
+    device_client = getattr(device, "_tydom_client", None)
+    for hub in hubs.values():
+        if getattr(hub, "_tydom_client", None) is device_client:
+            return hub
+        if any(
+            candidate is device for candidate in getattr(hub, "devices", {}).values()
+        ):
+            return hub
+    return None
+
+
 class HAEntity:
     """Generic abstract HA entity."""
 
@@ -233,17 +253,8 @@ class HAEntity:
     hass: Any = None
 
     def _get_hub(self):
-        """Get the hub instance from hass data."""
-        if self.hass is None:
-            return None
-        if DOMAIN not in self.hass.data:
-            return None
-        # Get the first hub entry (assuming single hub per instance)
-        hubs = self.hass.data[DOMAIN]
-        if not hubs:
-            return None
-        # Return the first hub (entry_id is the key)
-        return next(iter(hubs.values()))
+        """Return the hub that owns this entity's TYDOM device."""
+        return _get_hub_for_tydom_device(self.hass, self._device)
 
     def _get_tydom_gateway_device_id(self) -> str | None:
         """Get the Tydom gateway device_id to use as via_device_id."""
@@ -536,15 +547,8 @@ class GenericSensor(SensorEntity):
             self._attr_entity_category = EntityCategory.DIAGNOSTIC
 
     def _get_hub(self):
-        """Get the hub instance from hass data."""
-        if not hasattr(self, "hass") or self.hass is None:
-            return None
-        if DOMAIN not in self.hass.data:
-            return None
-        hubs = self.hass.data[DOMAIN]
-        if not hubs:
-            return None
-        return next(iter(hubs.values()))
+        """Return the hub that owns this entity's TYDOM device."""
+        return _get_hub_for_tydom_device(self.hass, self._device)
 
     def _get_tydom_gateway_device_id(self) -> str | None:
         """Get the Tydom gateway device_id to use as via_device_id."""
@@ -770,15 +774,8 @@ class BinarySensorBase(BinarySensorEntity):
         self._device = device
 
     def _get_hub(self):
-        """Get the hub instance from hass data."""
-        if not hasattr(self, "hass") or self.hass is None:
-            return None
-        if DOMAIN not in self.hass.data:
-            return None
-        hubs = self.hass.data[DOMAIN]
-        if not hubs:
-            return None
-        return next(iter(hubs.values()))
+        """Return the hub that owns this entity's TYDOM device."""
+        return _get_hub_for_tydom_device(self.hass, self._device)
 
     def _get_tydom_gateway_device_id(self) -> str | None:
         """Get the Tydom gateway device_id to use as via_device_id."""
@@ -909,15 +906,8 @@ class GenericBinarySensor(BinarySensorBase):
             self._attr_entity_category = EntityCategory.DIAGNOSTIC
 
     def _get_hub(self):
-        """Get the hub instance from hass data."""
-        if not hasattr(self, "hass") or self.hass is None:
-            return None
-        if DOMAIN not in self.hass.data:
-            return None
-        hubs = self.hass.data[DOMAIN]
-        if not hubs:
-            return None
-        return next(iter(hubs.values()))
+        """Return the hub that owns this entity's TYDOM device."""
+        return _get_hub_for_tydom_device(self.hass, self._device)
 
     def _get_tydom_gateway_device_id(self) -> str | None:
         """Get the Tydom gateway device_id to use as via_device_id."""
@@ -1093,15 +1083,8 @@ class ClockSensor(SensorEntity):
         return attrs
 
     def _get_hub(self):
-        """Get the hub instance from hass data."""
-        if not hasattr(self, "hass") or self.hass is None:
-            return None
-        if DOMAIN not in self.hass.data:
-            return None
-        hubs = self.hass.data[DOMAIN]
-        if not hubs:
-            return None
-        return next(iter(hubs.values()))
+        """Return the hub that owns this entity's TYDOM device."""
+        return _get_hub_for_tydom_device(self.hass, self._device)
 
     @property
     def device_info(self) -> DeviceInfo:
@@ -1214,15 +1197,8 @@ class GeolocationSensor(SensorEntity):
         return attrs
 
     def _get_hub(self):
-        """Get the hub instance from hass data."""
-        if not hasattr(self, "hass") or self.hass is None:
-            return None
-        if DOMAIN not in self.hass.data:
-            return None
-        hubs = self.hass.data[DOMAIN]
-        if not hubs:
-            return None
-        return next(iter(hubs.values()))
+        """Return the hub that owns this entity's TYDOM device."""
+        return _get_hub_for_tydom_device(self.hass, self._device)
 
     @property
     def device_info(self) -> DeviceInfo:
@@ -3193,7 +3169,9 @@ class HaGate(CoverEntity, HAEntity):
         self._attr_unique_id = f"{self._device.device_id}_cover"
         self._attr_name = None  # primary entity inherits device name
         self._registered_sensors = []
-        self._attr_supported_features = _level_command_cover_features(device)
+        self._attr_supported_features = _level_command_cover_features(
+            device, allow_position=True
+        )
 
     async def async_added_to_hass(self) -> None:
         """Refresh on every device push (see HACover for the MRO rationale)."""
@@ -3224,15 +3202,26 @@ class HaGate(CoverEntity, HAEntity):
 
     @property
     def is_closed(self) -> bool | None:
-        """Return if the window is closed."""
-        if hasattr(self._device, "openState"):
-            open_state = getattr(self._device, "openState", None)
+        """Return whether the gate is closed when feedback is available.
+
+        Some compatible gate motors report the same ``level`` feedback as a
+        garage door, while ordinary dry-contact receivers expose no feedback at
+        all. Older gate profiles can instead report ``openState``.
+        """
+        level = getattr(self._device, "level", None)
+        if level is not None:
+            return level == 0
+
+        open_state = getattr(self._device, "openState", None)
+        if open_state is not None:
             return open_state == "LOCKED"
-        else:
-            LOGGER.warning(
-                "no attribute 'openState' for device %s", self._device.device_id
-            )
-            return None
+
+        return None
+
+    @property
+    def current_cover_position(self) -> int | None:
+        """Return the reported gate position when the endpoint provides it."""
+        return getattr(self._device, "level", None)
 
     async def async_open_cover(self, **kwargs: Any) -> None:
         """Open the gate."""
@@ -3245,6 +3234,10 @@ class HaGate(CoverEntity, HAEntity):
     async def async_stop_cover(self, **kwargs: Any) -> None:
         """Stop the gate."""
         await self._device.stop()
+
+    async def async_set_cover_position(self, **kwargs: Any) -> None:
+        """Set the gate position when its endpoint allows it."""
+        await self._device.set_level(kwargs[ATTR_POSITION])
 
     async def async_toggle(self, **kwargs: Any) -> None:
         """Toggle the gate without deriving direction from an unknown state."""
@@ -3492,6 +3485,7 @@ class HaAlarm(AlarmControlPanelEntity, HAEntity):
         self._last_alarm_state = self.alarm_state
         self._last_alarm_event_sequence = self._device.alarm_event_sequence
         self._pending_alarm_actor: tuple[str, str, str] | None = None
+        self._open_issues_refresh_task = None
 
         self._attr_supported_features = (
             self._attr_supported_features
@@ -3510,6 +3504,8 @@ class HaAlarm(AlarmControlPanelEntity, HAEntity):
     async def async_will_remove_from_hass(self) -> None:
         """Remove the push callback registered in async_added_to_hass."""
         self._device.remove_callback(self._handle_alarm_update)
+        if self._open_issues_refresh_task is not None:
+            self._open_issues_refresh_task.cancel()
         if hasattr(self._device, "_ha_device") and self._device._ha_device is self:
             self._device._ha_device = None
         await super().async_will_remove_from_hass()
@@ -3559,6 +3555,60 @@ class HaAlarm(AlarmControlPanelEntity, HAEntity):
 
         self.async_write_ha_state()
 
+    def _schedule_open_issues_refresh(
+        self, *, after_unconfirmed_arm: bool = False
+    ) -> None:
+        """Fetch the central-reported blockers after a refused arm command."""
+        if (
+            self._open_issues_refresh_task is None
+            or self._open_issues_refresh_task.done()
+        ):
+            self._open_issues_refresh_task = self.hass.async_create_task(
+                self._async_refresh_open_issues(after_unconfirmed_arm),
+                "Refresh TYXAL open issues after refused arming",
+            )
+
+    async def _async_refresh_open_issues(
+        self, after_unconfirmed_arm: bool = False
+    ) -> None:
+        """Refresh issue details after an arm command that did not complete."""
+        if after_unconfirmed_arm:
+            # Some older gateways do not publish ACK or DENIED for alarm
+            # cdata. Give their normal state push time to arrive before
+            # deciding whether the command was refused.
+            await asyncio.sleep(_UNCONFIRMED_ARMING_SETTLE_DELAY)
+            if self.alarm_state != AlarmControlPanelState.DISARMED:
+                self._device.clear_open_issues()
+                self.async_write_ha_state()
+                return
+        else:
+            # The command result can precede the central's event/history
+            # update. Waiting avoids querying OPEN_ISSUES before it exists.
+            await asyncio.sleep(_REFUSED_ARMING_SETTLE_DELAY)
+        try:
+            # This is limited to refused or unconfirmed arm attempts. Use the
+            # normal history timeout, rather than the short startup probe for
+            # optional alarm-history sensors.
+            await self._device.get_open_issues()
+        except TydomOpenIssuesNotReadyError:
+            # One central reports the DENIED command outcome before publishing
+            # its refusal event. Retry once after the history record settles.
+            await asyncio.sleep(_OPEN_ISSUES_RETRY_DELAY)
+            try:
+                await self._device.get_open_issues()
+            except Exception:
+                LOGGER.debug(
+                    "Unable to retrieve detailed open issues after refused arming for %s",
+                    self._device.device_id,
+                    exc_info=True,
+                )
+        except Exception:
+            LOGGER.debug(
+                "Unable to retrieve detailed open issues after refused arming for %s",
+                self._device.device_id,
+                exc_info=True,
+            )
+
     @staticmethod
     def _actor_target_matches_state(target, state) -> bool:
         """Return whether an actor event describes the current HA alarm state."""
@@ -3577,10 +3627,14 @@ class HaAlarm(AlarmControlPanelEntity, HAEntity):
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
-        """Return the source type for the actor that changed alarm state."""
-        if self._changed_by_type is None:
-            return {}
-        return {"changed_by_type": self._changed_by_type}
+        """Return alarm actor metadata and current central-reported issues."""
+        attributes: dict[str, Any] = {}
+        if self._changed_by_type is not None:
+            attributes["changed_by_type"] = self._changed_by_type
+        if self._device.open_issues is not None:
+            attributes["open_issue_count"] = len(self._device.open_issues)
+            attributes["open_issues"] = self._device.open_issues
+        return attributes
 
     @property
     def alarm_state(self) -> AlarmControlPanelState:
@@ -3668,9 +3722,11 @@ class HaAlarm(AlarmControlPanelEntity, HAEntity):
     async def _run_alarm_command(self, command, operation: str) -> None:
         """Run an alarm command and expose a negative gateway result in HA."""
         try:
-            await command
+            command_confirmed = await command
         except TydomAlarmCommandError as err:
             if err.result == "DENIED":
+                if operation == "arming":
+                    self._schedule_open_issues_refresh()
                 raise HomeAssistantError(
                     f"The alarm system refused {operation}. Check the reported "
                     "defects before trying again."
@@ -3678,6 +3734,13 @@ class HaAlarm(AlarmControlPanelEntity, HAEntity):
             raise HomeAssistantError(
                 f"The alarm system rejected {operation} ({err.result})."
             ) from err
+        if operation == "arming" and command_confirmed is False:
+            # The gateway did not publish ACK/DENIED. Check its state after a
+            # short delay and retrieve blockers only if it remained disarmed.
+            self._schedule_open_issues_refresh(after_unconfirmed_arm=True)
+        elif operation == "arming":
+            self._device.clear_open_issues()
+            self.async_write_ha_state()
 
     async def async_force_arm(self, code: str, mode: str) -> None:
         """Force arming only after an explicit Home Assistant action."""
@@ -3697,6 +3760,10 @@ class HaAlarm(AlarmControlPanelEntity, HAEntity):
     async def async_get_events(self, event_type=None) -> list:
         """Get alarm events."""
         return await self._device.get_events(event_type or "UNACKED_EVENTS")
+
+    async def async_get_open_issues(self) -> list:
+        """Return the products the central currently reports as blocking arming."""
+        return await self._device.get_open_issues()
 
     async def async_get_alarm_products(self) -> dict[str, list[dict[str, Any]]]:
         """Return the products and zones configured on the alarm."""
@@ -5758,6 +5825,19 @@ class HASwitch(SwitchEntity, HAEntity):
     _attr_has_entity_name = True
     _attr_icon = "mdi:toggle-switch"
 
+    sensor_classes = {
+        "energyInstantTotElecP": SensorDeviceClass.POWER,
+        "energyTotIndexWatt": SensorDeviceClass.ENERGY,
+    }
+    state_classes = {
+        "energyInstantTotElecP": SensorStateClass.MEASUREMENT,
+        "energyTotIndexWatt": SensorStateClass.TOTAL_INCREASING,
+    }
+    units = {
+        "energyInstantTotElecP": UnitOfPower.WATT,
+        "energyTotIndexWatt": UnitOfEnergy.WATT_HOUR,
+    }
+
     def __init__(self, device: TydomDevice, hass) -> None:
         """Initialize HASwitch."""
         self.hass = hass
@@ -6546,6 +6626,240 @@ class HAButton(ButtonEntity, HAEntity):
             await self._device._tydom_client.put_devices_data(
                 self._device._id, self._device._endpoint, self._action_method, "ON"
             )
+
+
+ASSOCIATION_COMMAND = "modeAsso"
+IDENTIFY_COMMAND = "localisation"
+_COMMAND_START_VALUE = "START"
+
+
+def supports_command(device: Any, command: str) -> bool:
+    """Return whether an endpoint advertises a writable START command."""
+    metadata = getattr(device, "_metadata", None)
+    if not isinstance(metadata, dict):
+        return False
+    command_metadata = metadata.get(command)
+    if not isinstance(command_metadata, dict):
+        return False
+    permission = str(command_metadata.get("permission", "")).lower()
+    values = command_metadata.get("enum_values")
+    return (
+        "w" in permission
+        and isinstance(values, list)
+        and _COMMAND_START_VALUE in values
+    )
+
+
+async def start_command(device: Any, command: str) -> None:
+    """Run an association or localisation command advertised by a device."""
+    if not supports_command(device, command):
+        raise ValueError(f"Device does not support the {command} command")
+    endpoint_id = getattr(device, "_endpoint", None)
+    if endpoint_id is None:
+        raise ValueError("Device has no TYDOM endpoint")
+    await device._tydom_client.put_devices_data(
+        device._id,
+        endpoint_id,
+        command,
+        _COMMAND_START_VALUE,
+    )
+
+
+class HADeviceAssociationButton(ButtonEntity, HAEntity):
+    """Button for an association capability advertised by one product."""
+
+    _attr_should_poll = False
+    _attr_has_entity_name = True
+
+    def __init__(self, device: TydomDevice, hass, command: str) -> None:
+        """Initialise an association or physical-identification button."""
+        action_name, icon = {
+            ASSOCIATION_COMMAND: (
+                "Démarrer le mode association",
+                "mdi:link-variant-plus",
+            ),
+            IDENTIFY_COMMAND: ("Identifier l'appareil", "mdi:map-marker-radius"),
+        }[command]
+        self.hass = hass
+        self._device = device
+        self._association_command = command
+        self._attr_icon = icon
+        self._attr_name = action_name
+        self._attr_unique_id = f"{device.device_id}_button_{command}"
+
+    async def async_added_to_hass(self) -> None:
+        """Refresh when the associated product is updated."""
+        await super().async_added_to_hass()
+        self._device.register_callback(self.async_write_ha_state)
+
+    async def async_will_remove_from_hass(self) -> None:
+        """Detach the update callback without replacing the primary entity."""
+        self._device.remove_callback(self.async_write_ha_state)
+        await super().async_will_remove_from_hass()
+
+    @property
+    def device_info(self) -> DeviceInfo:
+        """Attach this control to the existing physical product."""
+        device_info = self._get_device_info()
+        info: DeviceInfo = {
+            "identifiers": {(DOMAIN, self._device.device_id)},
+            "name": self._device.device_name,
+            "manufacturer": device_info["manufacturer"],
+        }
+        if "model" in device_info:
+            info["model"] = device_info["model"]
+        return self._enrich_device_info(info)
+
+    async def async_press(self) -> None:
+        """Run the START command advertised by this endpoint."""
+        await start_command(self._device, self._association_command)
+
+
+class HADeviceRemovalButton(HADeviceAssociationButton):
+    """Disabled-by-default control for permanently removing one product."""
+
+    _attr_entity_registry_enabled_default = False
+
+    def __init__(self, device: TydomDevice, hass) -> None:
+        """Initialise an intentionally opt-in permanent-removal control."""
+        self.hass = hass
+        self._device = device
+        self._attr_icon = "mdi:link-variant-remove"
+        self._attr_name = "Dissocier définitivement l'appareil"
+        self._attr_unique_id = f"{device.device_id}_button_remove_association"
+
+    async def async_press(self) -> None:
+        """Permanently remove this product from its TYDOM gateway."""
+        device_id = getattr(self._device, "_id", None)
+        if device_id is None:
+            raise ValueError("Device has no TYDOM identifier")
+        await self._device._tydom_client.delete_device(device_id)
+
+
+class _GatewayAssociationEntity:
+    """Shared Home Assistant device information for gateway controls."""
+
+    _attr_should_poll = False
+    _attr_has_entity_name = True
+    _attr_entity_category = EntityCategory.CONFIG
+
+    def __init__(self, tydom_hub) -> None:
+        """Attach a control to its configured TYDOM gateway."""
+        self._hub = tydom_hub
+        self._attr_device_info = DeviceInfo(
+            identifiers={(DOMAIN, tydom_hub.hub_id)},
+            name=tydom_hub._name,
+            manufacturer=tydom_hub.manufacturer,
+        )
+
+    async def async_added_to_hass(self) -> None:
+        """Subscribe to selection changes made by companion controls."""
+        await super().async_added_to_hass()
+        self._hub.register_association_control(self)
+
+    async def async_will_remove_from_hass(self) -> None:
+        """Stop receiving selection changes after removal."""
+        self._hub.unregister_association_control(self)
+        await super().async_will_remove_from_hass()
+
+
+class HAGatewayAssociationCategorySelect(_GatewayAssociationEntity, SelectEntity):
+    """Choose the intended usage before choosing a product family."""
+
+    _attr_icon = "mdi:shape-outline"
+
+    def __init__(self, tydom_hub) -> None:
+        """Initialise the association-category selector."""
+        super().__init__(tydom_hub)
+        self._attr_unique_id = f"{tydom_hub.hub_id}_association_category"
+        self._attr_name = "1. Catégorie à associer"
+
+    @property
+    def options(self) -> list[str]:
+        """Return the product categories from the official workflow."""
+        return list(self._hub.association_categories)
+
+    @property
+    def current_option(self) -> str:
+        """Return the selected product category."""
+        return self._hub.association_category
+
+    async def async_select_option(self, option: str) -> None:
+        """Select a category and reset the product selection if needed."""
+        self._hub.set_association_category(option)
+
+
+class HAGatewayAssociationProductSelect(_GatewayAssociationEntity, SelectEntity):
+    """Choose a product family compatible with the selected category."""
+
+    _attr_icon = "mdi:devices"
+
+    def __init__(self, tydom_hub) -> None:
+        """Initialise the product-family selector."""
+        super().__init__(tydom_hub)
+        self._attr_unique_id = f"{tydom_hub.hub_id}_association_product"
+        self._attr_name = "2. Produit à associer"
+
+    @property
+    def options(self) -> list[str]:
+        """Return products for the selected category only."""
+        return list(self._hub.association_product_labels)
+
+    @property
+    def current_option(self) -> str:
+        """Return the selected product-family label."""
+        return self._hub.association_product_label
+
+    async def async_select_option(self, option: str) -> None:
+        """Select the protocol profile represented by an option."""
+        self._hub.set_association_product(option)
+
+
+class HAGatewayAssociationUsageSelect(_GatewayAssociationEntity, SelectEntity):
+    """Choose the supported application usage for the selected product."""
+
+    _attr_icon = "mdi:format-list-bulleted-type"
+
+    def __init__(self, tydom_hub) -> None:
+        """Initialise the product-usage selector."""
+        super().__init__(tydom_hub)
+        self._attr_unique_id = f"{tydom_hub.hub_id}_association_usage"
+        self._attr_name = "3. Usage / type d'association"
+
+    @property
+    def options(self) -> list[str]:
+        """Return only usages documented for the selected product."""
+        return list(self._hub.association_usage_labels)
+
+    @property
+    def current_option(self) -> str:
+        """Return the selected application usage."""
+        return self._hub.association_usage_label
+
+    async def async_select_option(self, option: str) -> None:
+        """Select a valid product usage and its exact discovery recipe."""
+        self._hub.set_association_usage(option)
+
+
+class HAGatewayStartAssociationButton(_GatewayAssociationEntity, ButtonEntity):
+    """Start the generic add-product workflow on the selected gateway."""
+
+    _attr_icon = "mdi:link-plus"
+
+    def __init__(self, tydom_hub) -> None:
+        """Initialise the start-association button."""
+        super().__init__(tydom_hub)
+        self._attr_unique_id = f"{tydom_hub.hub_id}_start_product_association"
+        self._attr_name = "4. Démarrer l'association"
+
+    @property
+    def available(self) -> bool:
+        """Disable the action if the category has no local install profile."""
+        return self._hub.association_product_supported
+
+    async def async_press(self) -> None:
+        """Start association using the selected product family."""
+        await self._hub.start_selected_product_association()
 
 
 class HAAlarmAcknowledgeButton(ButtonEntity, HAEntity):
