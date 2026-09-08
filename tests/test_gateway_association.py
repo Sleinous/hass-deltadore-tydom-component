@@ -5,6 +5,7 @@ from unittest import IsolatedAsyncioTestCase
 
 from custom_components.deltadore_tydom.hub import (
     ASSOCIATION_CATALOG,
+    get_association_choices,
     get_install_payload,
     remove_product_association,
     start_product_association,
@@ -91,6 +92,20 @@ class GatewayAssociationTests(IsolatedAsyncioTestCase):
             tydom_hub.association_product_label, "Récepteur volet roulant X3D"
         )
 
+    def test_tyxia_2600_uses_the_remote_discovery_profile(self) -> None:
+        """Expose the official TYXIA 2600 profile as an emitter, not a controller."""
+        choice = next(
+            choice
+            for choice in get_association_choices("Interrupteurs")
+            if "TYXIA 2600" in choice.label
+        )
+
+        self.assertEqual(choice.profile_id, "remote_x3d")
+        self.assertEqual(
+            get_install_payload(choice.profile_id),
+            {"protocol": "X3D", "type": "direct", "profile": "remote"},
+        )
+
     async def test_association_uses_the_gateway_client(self) -> None:
         """Association is sent through the configured gateway client."""
         client = _Client()
@@ -147,7 +162,9 @@ class GatewayAssociationTests(IsolatedAsyncioTestCase):
 
         self.assertEqual(calls, ["42"])
 
-    async def test_device_removal_button_is_opt_in_and_removes_its_product(self) -> None:
+    async def test_device_removal_button_is_opt_in_and_removes_its_product(
+        self,
+    ) -> None:
         """The device-page removal control must be disabled until explicitly enabled."""
         calls: list[str] = []
 

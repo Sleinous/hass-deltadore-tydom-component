@@ -259,12 +259,13 @@ ASSOCIATION_CATALOG: dict[str, tuple[AssociationChoice, ...]] = {
         AssociationChoice("Station météo", "weather_plt"),
     ),
     "Télécommandes et claviers": (
-        AssociationChoice("Télécommande X3D", "remote_x3d"),
+        AssociationChoice("Télécommande / émetteur X3D (ex. TYXIA 2600)", "remote_x3d"),
         AssociationChoice("Contrôleur X3D", "controller_x3d"),
     ),
     "Interrupteurs": (
         AssociationChoice("Interrupteur / récepteur éclairage X3D", "light_x3d"),
         AssociationChoice("Éclairage Zigbee", "light_zigbee"),
+        AssociationChoice("Interrupteur / émetteur X3D (ex. TYXIA 2600)", "remote_x3d"),
         AssociationChoice("Contrôleur X3D", "controller_x3d"),
     ),
     "Capteurs": (
@@ -1282,7 +1283,9 @@ class Hub:
         if (
             removal_key not in self._device_association_buttons_created
             and getattr(device, "_id", None) is not None
-            and callable(getattr(getattr(device, "_tydom_client", None), "delete_device", None))
+            and callable(
+                getattr(getattr(device, "_tydom_client", None), "delete_device", None)
+            )
         ):
             buttons.append(HADeviceRemovalButton(device, self._hass))
             self._device_association_buttons_created.add(removal_key)
