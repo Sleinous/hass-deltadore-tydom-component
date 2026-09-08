@@ -210,6 +210,10 @@ class TydomClient:
         # 404 confirms that a feature is absent, avoid querying it on every
         # reconnect or inventory reload.
         self._unsupported_optional_paths: set[str] = set()
+        # Product discovery changed endpoint across gateway firmware. Prefer
+        # the current API and switch permanently for this client after an
+        # explicit capability rejection.
+        self._device_discovery_endpoint = "/devices"
 
     def update_config(self, zone_home: str, zone_away: str, zone_night: str):
         """Update zones configuration."""
@@ -1154,11 +1158,12 @@ class TydomClient:
         """Start the gateway's generic product-discovery workflow.
 
         The official application sends its ``DISCOVER`` request to
-        ``/devices``. Some gateway firmware keeps this request open while it
-        listens for a radio product and does not send a synchronous HTTP
-        reply. Dispatch it without waiting for such a reply; callers must
-        subsequently reload the inventory to determine whether a product was
-        discovered.
+        ``/devices``. Older gateway firmware returns an immediate 404 for that
+        resource and requires the legacy ``/devices/install`` endpoint instead.
+        Some supported firmware keeps the primary request open while it listens
+        for a radio product, so its expected short timeout is not an error.
+        Callers must subsequently reload the inventory to determine whether a
+        product was discovered.
         """
         required = {"protocol", "type", "profile"}
         missing = required.difference(payload)
@@ -1166,10 +1171,44 @@ class TydomClient:
             raise ValueError(
                 "Product association payload is missing: " + ", ".join(sorted(missing))
             )
-        transaction_id = await self.send_request("POST", "/devices", body=payload)
+
+        endpoint = self._device_discovery_endpoint
+        if endpoint == "/devices/install":
+            transaction_id = await self.send_request("POST", endpoint, body=payload)
+            LOGGER.debug(
+                "Dispatched legacy product-association request "
+                "(transaction_id: %s)",
+                transaction_id,
+            )
+            return
+
+        try:
+            await self.get_reply_to_request(
+                "POST",
+                endpoint,
+                body=payload,
+                timeout=1,
+                log_timeout=False,
+            )
+        except TydomClientApiClientCommunicationError as err:
+            if "HTTP 404" not in str(err):
+                # A radio scan commonly keeps /devices open beyond the short
+                # probe timeout. The request was sent, so discovery continues.
+                LOGGER.debug("Product-association request dispatched: %s", err)
+                return
+
+            self._device_discovery_endpoint = "/devices/install"
+            transaction_id = await self.send_request("POST", endpoint + "/install", body=payload)
+            LOGGER.info(
+                "Gateway does not support %s; dispatched legacy "
+                "product-association request (transaction_id: %s)",
+                endpoint,
+                transaction_id,
+            )
+            return
+
         LOGGER.debug(
-            "Dispatched product-association request (transaction_id: %s)",
-            transaction_id,
+            "Gateway acknowledged product-association request on /devices"
         )
 
     async def delete_device(self, device_id: str | int) -> None:
