@@ -497,19 +497,60 @@ class TestManagedConnection(IsolatedAsyncioTestCase):
             ],
         )
 
-    async def test_product_discovery_does_not_wait_for_gateway_reply(self) -> None:
-        """Discovery must not fail when a gateway keeps its radio scan open."""
+    async def test_product_discovery_tolerates_a_gateway_scan_timeout(self) -> None:
+        """Discovery must continue when a gateway keeps its radio scan open."""
         client = self._client()
-        client.send_request = AsyncMock(return_value="request-1")
+        client.get_reply_to_request = AsyncMock(
+            side_effect=TydomClientApiClientCommunicationError(
+                "Timeout waiting for reply to POST /devices"
+            )
+        )
 
         await client.post_device_discovery(
             {"protocol": "X3D", "type": "x3d_rm", "profile": "light"}
         )
 
-        client.send_request.assert_awaited_once_with(
+        client.get_reply_to_request.assert_awaited_once_with(
             "POST",
             "/devices",
             body={"protocol": "X3D", "type": "x3d_rm", "profile": "light"},
+            timeout=1,
+            log_timeout=False,
+        )
+
+    async def test_product_discovery_falls_back_when_devices_is_not_supported(
+        self,
+    ) -> None:
+        """Legacy gateways use /devices/install after a /devices 404."""
+        client = self._client()
+        client.get_reply_to_request = AsyncMock(
+            side_effect=TydomClientApiClientCommunicationError(
+                "Request POST /devices failed: HTTP 404"
+            )
+        )
+        client.send_request = AsyncMock(return_value="legacy-request")
+        payload = {"protocol": "X3D", "type": "x3d_rm", "profile": "light"}
+
+        await client.post_device_discovery(payload)
+
+        client.send_request.assert_awaited_once_with(
+            "POST", "/devices/install", body=payload
+        )
+        self.assertEqual(client._device_discovery_endpoint, "/devices/install")
+
+    async def test_product_discovery_remembers_the_legacy_endpoint(self) -> None:
+        """A gateway capability result must avoid probing /devices again."""
+        client = self._client()
+        client._device_discovery_endpoint = "/devices/install"
+        client.get_reply_to_request = AsyncMock()
+        client.send_request = AsyncMock(return_value="legacy-request")
+        payload = {"protocol": "X3D", "type": "x3d_rm", "profile": "light"}
+
+        await client.post_device_discovery(payload)
+
+        client.get_reply_to_request.assert_not_awaited()
+        client.send_request.assert_awaited_once_with(
+            "POST", "/devices/install", body=payload
         )
 
     async def test_missing_optional_endpoints_are_not_retried(self) -> None:
