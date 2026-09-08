@@ -85,7 +85,7 @@ from .ha_entities import (
     supports_command,
 )
 
-from .const import LOGGER, get_polling_interval_for_validity, STRUCTURED_LOGGER
+from .const import DOMAIN, LOGGER, STRUCTURED_LOGGER, get_polling_interval_for_validity
 from .remote_registry_migration import migrate_legacy_remote_endpoint
 
 
@@ -308,10 +308,48 @@ def get_install_payload(
 async def start_product_association(
     tydom_hub, profile_id: str, network: int | None = None
 ) -> dict[str, str | int]:
-    """Start association on one configured TYDOM/Tywell gateway."""
+    """Start association through the physical gateway's LAN connection."""
     payload = get_install_payload(profile_id, network)
-    await tydom_hub._tydom_client.post_device_discovery(payload)
+    local_hub = _get_local_association_hub(tydom_hub)
+    await local_hub._tydom_client.post_device_discovery(payload)
     return payload
+
+
+def _normalized_gateway_mac(gateway_mac: object) -> str:
+    """Return a comparison-safe gateway MAC address."""
+    return "".join(
+        character for character in str(gateway_mac) if character.isalnum()
+    ).upper()
+
+
+def _get_local_association_hub(tydom_hub):
+    """Prefer the matching LAN entry when the selected entry uses mediation.
+
+    Radio discovery is a gateway-local operation. A user can legitimately have
+    several distinct TYDOM installations in Home Assistant, so only an entry
+    with the *same gateway MAC* may be selected as a fallback.
+    """
+    tydom_client = getattr(tydom_hub, "_tydom_client", None)
+    if tydom_client is None:
+        raise ValueError("The selected TYDOM gateway has no active client")
+    if not getattr(tydom_client, "_remote_mode", False):
+        return tydom_hub
+
+    hass = getattr(tydom_hub, "_hass", None)
+    gateway_mac = _normalized_gateway_mac(getattr(tydom_hub, "_mac", ""))
+    if hass is not None and gateway_mac:
+        local_hubs = [
+            hub
+            for hub in getattr(hass, "data", {}).get(DOMAIN, {}).values()
+            if _normalized_gateway_mac(getattr(hub, "_mac", "")) == gateway_mac
+            and not getattr(getattr(hub, "_tydom_client", None), "_remote_mode", True)
+        ]
+        if len(local_hubs) == 1:
+            return local_hubs[0]
+
+    raise ValueError(
+        "Product association requires a direct local connection to this TYDOM gateway"
+    )
 
 
 async def remove_product_association(device) -> None:
