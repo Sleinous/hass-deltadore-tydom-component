@@ -6779,6 +6779,32 @@ class HAGatewayAssociationProductSelect(_GatewayAssociationEntity, SelectEntity)
         self._hub.set_association_product(option)
 
 
+class HAGatewayAssociationUsageSelect(_GatewayAssociationEntity, SelectEntity):
+    """Choose the supported application usage for the selected product."""
+
+    _attr_icon = "mdi:format-list-bulleted-type"
+
+    def __init__(self, tydom_hub) -> None:
+        """Initialise the product-usage selector."""
+        super().__init__(tydom_hub)
+        self._attr_unique_id = f"{tydom_hub.hub_id}_association_usage"
+        self._attr_name = "3. Usage / type d'association"
+
+    @property
+    def options(self) -> list[str]:
+        """Return only usages documented for the selected product."""
+        return list(self._hub.association_usage_labels)
+
+    @property
+    def current_option(self) -> str:
+        """Return the selected application usage."""
+        return self._hub.association_usage_label
+
+    async def async_select_option(self, option: str) -> None:
+        """Select a valid product usage and its exact discovery recipe."""
+        self._hub.set_association_usage(option)
+
+
 class HAGatewayStartAssociationButton(_GatewayAssociationEntity, ButtonEntity):
     """Start the generic add-product workflow on the selected gateway."""
 
@@ -6788,7 +6814,7 @@ class HAGatewayStartAssociationButton(_GatewayAssociationEntity, ButtonEntity):
         """Initialise the start-association button."""
         super().__init__(tydom_hub)
         self._attr_unique_id = f"{tydom_hub.hub_id}_start_product_association"
-        self._attr_name = "3. Démarrer l'association"
+        self._attr_name = "4. Démarrer l'association"
 
     @property
     def available(self) -> bool:
