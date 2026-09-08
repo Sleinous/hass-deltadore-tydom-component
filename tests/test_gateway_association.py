@@ -5,6 +5,7 @@ from unittest import IsolatedAsyncioTestCase
 
 from custom_components.deltadore_tydom.hub import (
     ASSOCIATION_CATALOG,
+    OFFICIAL_DISCOVERY_PROFILES,
     get_association_choices,
     get_install_payload,
     remove_product_association,
@@ -83,14 +84,13 @@ class GatewayAssociationTests(IsolatedAsyncioTestCase):
         tydom_hub = object.__new__(Hub)
         tydom_hub._association_controls = []
         tydom_hub._association_category = "Éclairages"
+        tydom_hub._association_product = "TYXIA 4600"
         tydom_hub._association_profile = "light_x3d"
 
         tydom_hub.set_association_category("Volets")
 
         self.assertEqual(tydom_hub.association_category, "Volets")
-        self.assertEqual(
-            tydom_hub.association_product_label, "Récepteur volet roulant X3D"
-        )
+        self.assertEqual(tydom_hub.association_product_label, "ACTIVE HOME KLINE")
 
     def test_tyxia_2600_uses_the_remote_discovery_profile(self) -> None:
         """Expose the official TYXIA 2600 profile as an emitter, not a controller."""
@@ -100,11 +100,33 @@ class GatewayAssociationTests(IsolatedAsyncioTestCase):
             if "TYXIA 2600" in choice.label
         )
 
-        self.assertEqual(choice.profile_id, "remote_x3d")
+        self.assertEqual(choice.profile_id, "official:remote_X3D_direct")
         self.assertEqual(
             get_install_payload(choice.profile_id),
             {"protocol": "X3D", "type": "direct", "profile": "remote"},
         )
+
+    def test_product_usage_is_limited_to_the_official_catalog(self) -> None:
+        """An opening detector only offers its documented door/window usages."""
+        tydom_hub = object.__new__(Hub)
+        tydom_hub._association_controls = []
+        tydom_hub._association_category = "Porte"
+        tydom_hub._association_product = "DETECTEUR OUVERTURE"
+        tydom_hub._association_profile = "official:detector_X3D_direct"
+
+        self.assertEqual(tydom_hub.association_usage_labels, ("Porte", "Fenêtres"))
+
+        tydom_hub.set_association_usage("Fenêtres")
+
+        self.assertEqual(tydom_hub.association_category, "Fenêtres")
+        self.assertEqual(
+            get_install_payload(tydom_hub._association_profile),
+            {"protocol": "X3D", "type": "direct", "profile": "detector"},
+        )
+
+    def test_official_catalog_profiles_are_available_to_the_gateway(self) -> None:
+        """Keep every app-derived recipe addressable by product selection."""
+        self.assertGreaterEqual(len(OFFICIAL_DISCOVERY_PROFILES), 30)
 
     async def test_association_uses_the_gateway_client(self) -> None:
         """Association is sent through the configured gateway client."""
