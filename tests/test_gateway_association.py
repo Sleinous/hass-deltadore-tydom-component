@@ -124,6 +124,26 @@ class GatewayAssociationTests(IsolatedAsyncioTestCase):
             {"protocol": "X3D", "type": "direct", "profile": "detector"},
         )
 
+    def test_multi_usage_product_uses_the_recipe_for_its_selected_usage(self) -> None:
+        """A product can switch between its documented HVAC and energy usages."""
+        tydom_hub = object.__new__(Hub)
+        tydom_hub._association_controls = []
+        tydom_hub._association_category = "Thermique"
+        tydom_hub._association_product = "HITACHI ATW"
+        tydom_hub._association_profile = "official:thermic_X3D_x3d_rm_es"
+
+        self.assertEqual(
+            tydom_hub.association_usage_labels,
+            ("Thermique", "Consommation"),
+        )
+
+        tydom_hub.set_association_usage("Consommation")
+
+        self.assertEqual(
+            get_install_payload(tydom_hub._association_profile),
+            {"protocol": "X3D", "type": "direct", "profile": "typassAtl"},
+        )
+
     def test_official_catalog_profiles_are_available_to_the_gateway(self) -> None:
         """Keep every app-derived recipe addressable by product selection."""
         self.assertGreaterEqual(len(OFFICIAL_DISCOVERY_PROFILES), 30)
