@@ -327,7 +327,9 @@ def _get_local_association_hub(tydom_hub):
 
     Radio discovery is a gateway-local operation. A user can legitimately have
     several distinct TYDOM installations in Home Assistant, so only an entry
-    with the *same gateway MAC* may be selected as a fallback.
+    with the *same gateway MAC* may replace the selected entry. Keep the
+    selected connection when there is no unambiguous local match: the official
+    cloud workflow must keep working for cloud-only installations.
     """
     tydom_client = getattr(tydom_hub, "_tydom_client", None)
     if tydom_client is None:
@@ -347,9 +349,7 @@ def _get_local_association_hub(tydom_hub):
         if len(local_hubs) == 1:
             return local_hubs[0]
 
-    raise ValueError(
-        "Product association requires a direct local connection to this TYDOM gateway"
-    )
+    return tydom_hub
 
 
 async def remove_product_association(device) -> None:
