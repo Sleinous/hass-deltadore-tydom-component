@@ -220,6 +220,22 @@ def is_binary_attribute(
     )
 
 
+def _get_hub_for_tydom_device(hass: Any, device: Any):
+    """Return the hub that owns one device, even with several gateways."""
+    if hass is None:
+        return None
+    hubs = getattr(hass, "data", {}).get(DOMAIN, {})
+    device_client = getattr(device, "_tydom_client", None)
+    for hub in hubs.values():
+        if getattr(hub, "_tydom_client", None) is device_client:
+            return hub
+        if any(
+            candidate is device for candidate in getattr(hub, "devices", {}).values()
+        ):
+            return hub
+    return None
+
+
 class HAEntity:
     """Generic abstract HA entity."""
 
@@ -233,17 +249,8 @@ class HAEntity:
     hass: Any = None
 
     def _get_hub(self):
-        """Get the hub instance from hass data."""
-        if self.hass is None:
-            return None
-        if DOMAIN not in self.hass.data:
-            return None
-        # Get the first hub entry (assuming single hub per instance)
-        hubs = self.hass.data[DOMAIN]
-        if not hubs:
-            return None
-        # Return the first hub (entry_id is the key)
-        return next(iter(hubs.values()))
+        """Return the hub that owns this entity's TYDOM device."""
+        return _get_hub_for_tydom_device(self.hass, self._device)
 
     def _get_tydom_gateway_device_id(self) -> str | None:
         """Get the Tydom gateway device_id to use as via_device_id."""
@@ -536,15 +543,8 @@ class GenericSensor(SensorEntity):
             self._attr_entity_category = EntityCategory.DIAGNOSTIC
 
     def _get_hub(self):
-        """Get the hub instance from hass data."""
-        if not hasattr(self, "hass") or self.hass is None:
-            return None
-        if DOMAIN not in self.hass.data:
-            return None
-        hubs = self.hass.data[DOMAIN]
-        if not hubs:
-            return None
-        return next(iter(hubs.values()))
+        """Return the hub that owns this entity's TYDOM device."""
+        return _get_hub_for_tydom_device(self.hass, self._device)
 
     def _get_tydom_gateway_device_id(self) -> str | None:
         """Get the Tydom gateway device_id to use as via_device_id."""
@@ -770,15 +770,8 @@ class BinarySensorBase(BinarySensorEntity):
         self._device = device
 
     def _get_hub(self):
-        """Get the hub instance from hass data."""
-        if not hasattr(self, "hass") or self.hass is None:
-            return None
-        if DOMAIN not in self.hass.data:
-            return None
-        hubs = self.hass.data[DOMAIN]
-        if not hubs:
-            return None
-        return next(iter(hubs.values()))
+        """Return the hub that owns this entity's TYDOM device."""
+        return _get_hub_for_tydom_device(self.hass, self._device)
 
     def _get_tydom_gateway_device_id(self) -> str | None:
         """Get the Tydom gateway device_id to use as via_device_id."""
@@ -909,15 +902,8 @@ class GenericBinarySensor(BinarySensorBase):
             self._attr_entity_category = EntityCategory.DIAGNOSTIC
 
     def _get_hub(self):
-        """Get the hub instance from hass data."""
-        if not hasattr(self, "hass") or self.hass is None:
-            return None
-        if DOMAIN not in self.hass.data:
-            return None
-        hubs = self.hass.data[DOMAIN]
-        if not hubs:
-            return None
-        return next(iter(hubs.values()))
+        """Return the hub that owns this entity's TYDOM device."""
+        return _get_hub_for_tydom_device(self.hass, self._device)
 
     def _get_tydom_gateway_device_id(self) -> str | None:
         """Get the Tydom gateway device_id to use as via_device_id."""
@@ -1093,15 +1079,8 @@ class ClockSensor(SensorEntity):
         return attrs
 
     def _get_hub(self):
-        """Get the hub instance from hass data."""
-        if not hasattr(self, "hass") or self.hass is None:
-            return None
-        if DOMAIN not in self.hass.data:
-            return None
-        hubs = self.hass.data[DOMAIN]
-        if not hubs:
-            return None
-        return next(iter(hubs.values()))
+        """Return the hub that owns this entity's TYDOM device."""
+        return _get_hub_for_tydom_device(self.hass, self._device)
 
     @property
     def device_info(self) -> DeviceInfo:
@@ -1214,15 +1193,8 @@ class GeolocationSensor(SensorEntity):
         return attrs
 
     def _get_hub(self):
-        """Get the hub instance from hass data."""
-        if not hasattr(self, "hass") or self.hass is None:
-            return None
-        if DOMAIN not in self.hass.data:
-            return None
-        hubs = self.hass.data[DOMAIN]
-        if not hubs:
-            return None
-        return next(iter(hubs.values()))
+        """Return the hub that owns this entity's TYDOM device."""
+        return _get_hub_for_tydom_device(self.hass, self._device)
 
     @property
     def device_info(self) -> DeviceInfo:
