@@ -66,6 +66,7 @@ from .ha_entities import (
     HASwitch,
     HAButton,
     HADeviceAssociationButton,
+    HADeviceRemovalButton,
     HAGatewayAssociationCategorySelect,
     HAGatewayAssociationProductSelect,
     HAGatewayStartAssociationButton,
@@ -1272,11 +1273,20 @@ class Hub:
             )
 
     def _maybe_create_device_association_buttons(self, device: TydomDevice) -> None:
-        """Expose only association controls advertised by a physical product."""
+        """Expose association and opt-in permanent-removal product controls."""
         if self.add_button_callback is None:
             return
 
         buttons = []
+        removal_key = (device.device_id, "remove_association")
+        if (
+            removal_key not in self._device_association_buttons_created
+            and getattr(device, "_id", None) is not None
+            and callable(getattr(getattr(device, "_tydom_client", None), "delete_device", None))
+        ):
+            buttons.append(HADeviceRemovalButton(device, self._hass))
+            self._device_association_buttons_created.add(removal_key)
+
         for command in (ASSOCIATION_COMMAND, IDENTIFY_COMMAND):
             key = (device.device_id, command)
             if key in self._device_association_buttons_created:
