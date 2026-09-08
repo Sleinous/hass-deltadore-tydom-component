@@ -9,6 +9,7 @@ from custom_components.deltadore_tydom.hub import (
     remove_product_association,
     start_product_association,
 )
+from custom_components.deltadore_tydom.ha_entities import HADeviceRemovalButton
 from custom_components.deltadore_tydom.hub import Hub
 from custom_components.deltadore_tydom.const import DOMAIN
 
@@ -143,5 +144,25 @@ class GatewayAssociationTests(IsolatedAsyncioTestCase):
         )
 
         await remove_product_association(device)
+
+        self.assertEqual(calls, ["42"])
+
+    async def test_device_removal_button_is_opt_in_and_removes_its_product(self) -> None:
+        """The device-page removal control must be disabled until explicitly enabled."""
+        calls: list[str] = []
+
+        async def delete_device(device_id: str) -> None:
+            calls.append(device_id)
+
+        device = SimpleNamespace(
+            device_id="42",
+            _id="42",
+            _tydom_client=SimpleNamespace(delete_device=delete_device),
+        )
+        button = HADeviceRemovalButton(device, None)
+
+        self.assertFalse(button._attr_entity_registry_enabled_default)
+
+        await button.async_press()
 
         self.assertEqual(calls, ["42"])

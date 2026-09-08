@@ -6679,6 +6679,27 @@ class HADeviceAssociationButton(ButtonEntity, HAEntity):
         await start_command(self._device, self._association_command)
 
 
+class HADeviceRemovalButton(HADeviceAssociationButton):
+    """Disabled-by-default control for permanently removing one product."""
+
+    _attr_entity_registry_enabled_default = False
+
+    def __init__(self, device: TydomDevice, hass) -> None:
+        """Initialise an intentionally opt-in permanent-removal control."""
+        self.hass = hass
+        self._device = device
+        self._attr_icon = "mdi:link-variant-remove"
+        self._attr_name = "Dissocier définitivement l'appareil"
+        self._attr_unique_id = f"{device.device_id}_button_remove_association"
+
+    async def async_press(self) -> None:
+        """Permanently remove this product from its TYDOM gateway."""
+        device_id = getattr(self._device, "_id", None)
+        if device_id is None:
+            raise ValueError("Device has no TYDOM identifier")
+        await self._device._tydom_client.delete_device(device_id)
+
+
 class _GatewayAssociationEntity:
     """Shared Home Assistant device information for gateway controls."""
 
