@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import asyncio
-import contextlib
 import copy
 import time
 from collections.abc import Callable
@@ -67,10 +66,12 @@ from .ha_entities import (
     HASwitch,
     HAButton,
     HADeviceAssociationButton,
+    HADeviceRemovalButton,
     HAGatewayAssociationCategorySelect,
     HAGatewayAssociationChannelSelect,
     HAGatewayAssociationGuideButton,
     HAGatewayAssociationProductSelect,
+    HAGatewayAssociationUsageSelect,
     HAGatewayStartAssociationButton,
     HAAlarmAcknowledgeButton,
     HAAlarmPendingEventsSensor,
@@ -704,7 +705,7 @@ def _get_local_association_hub(tydom_hub):
 
 
 async def remove_product_association(device) -> None:
-    """Cleanly remove a product from the TYDOM gateway.
+    """Remove a product cleanly from the TYDOM gateway.
 
     A radio DELETE alone is insufficient for devices created as a
     ``relatedendpoints`` group (for example a TYXIA 2600): it leaves the
