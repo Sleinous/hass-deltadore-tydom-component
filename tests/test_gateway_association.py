@@ -6,11 +6,14 @@ from unittest.mock import MagicMock
 
 from custom_components.deltadore_tydom.hub import (
     ASSOCIATION_CATALOG,
+    OFFICIAL_DISCOVERY_PROFILES,
+    get_association_choices,
     get_install_payload,
     remove_product_association,
     start_product_association,
 )
 from custom_components.deltadore_tydom.hub import Hub
+from custom_components.deltadore_tydom.ha_entities import HADeviceRemovalButton
 from custom_components.deltadore_tydom.const import DOMAIN
 from custom_components.deltadore_tydom.tydom.tydom_devices import (
     TydomInterrupter,
@@ -96,7 +99,7 @@ class GatewayAssociationTests(IsolatedAsyncioTestCase):
         )
 
     def test_tyxia_2600_exposes_each_physical_button_and_its_guide(self) -> None:
-        """Do not present a two-button remote as a one-step generic pairing."""
+        """Present the two TYDOM flows without mixing their button sequences."""
         tydom_hub = object.__new__(Hub)
         tydom_hub._association_controls = []
         tydom_hub._association_category = "Interrupteurs"
@@ -104,26 +107,37 @@ class GatewayAssociationTests(IsolatedAsyncioTestCase):
         tydom_hub._association_profile = "official:remote_X3D_direct"
         tydom_hub._association_channel = "Bouton A"
 
-        self.assertEqual(
-            tydom_hub.association_channel_labels, ("Bouton A", "Bouton B")
+        self.assertEqual(tydom_hub.association_channel_labels, ("Bouton A", "Bouton B"))
+        self.assertIn(
+            "choisissez d'abord la voie à associer : Bouton A",
+            tydom_hub.association_instructions[1],
         )
         self.assertIn(
-            "Maintenez A pendant 6 secondes", tydom_hub.association_instructions[0]
+            "bouton A physique pendant 6 secondes",
+            tydom_hub.association_instructions[2],
+        )
+        self.assertIn("bouton physique A", tydom_hub.association_instructions[6])
+        self.assertIn(
+            "maintenir A pendant 3 secondes",
+            tydom_hub.association_instructions[-1],
         )
 
         tydom_hub.set_association_channel("Bouton B")
 
         self.assertIn(
-            "Maintenez B pendant 6 secondes", tydom_hub.association_instructions[0]
+            "choisissez d'abord la voie à associer : Bouton B",
+            tydom_hub.association_instructions[1],
         )
+        self.assertIn(
+            "bouton A physique pendant 6 secondes",
+            tydom_hub.association_instructions[2],
+        )
+        self.assertIn("bouton physique B", tydom_hub.association_instructions[6])
 
     def test_official_products_hide_ambiguous_generic_recipes(self) -> None:
         """Known hardware must not be mixed with raw radio-profile choices."""
         self.assertEqual(
-            tuple(
-                choice.label
-                for choice in get_association_choices("Interrupteurs")
-            ),
+            tuple(choice.label for choice in get_association_choices("Interrupteurs")),
             ("TYXIA 2310", "TYXIA 2600", "TYXIA 2700"),
         )
 
