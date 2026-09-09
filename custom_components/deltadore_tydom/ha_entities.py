@@ -6730,6 +6730,25 @@ class HADeviceRemovalButton(HADeviceAssociationButton):
         await self._removal_callback(self._device)
 
 
+class HATyxia2600FinalizeAssociationButton(HADeviceAssociationButton):
+    """Explicitly turn a discovered TYXIA 2600 button into an interrupter."""
+
+    _attr_icon = "mdi:form-select"
+
+    def __init__(self, device: TydomDevice, hass, channel: str, callback) -> None:
+        """Initialise the safe post-discovery configuration action."""
+        self.hass = hass
+        self._device = device
+        self._channel = channel
+        self._callback = callback
+        self._attr_name = f"Configurer {channel} comme interrupteur"
+        self._attr_unique_id = f"{device.device_id}_button_finalize_tyxia_2600"
+
+    async def async_press(self) -> None:
+        """Persist the selected button with the official interrupter metadata."""
+        await self._callback(self._device, self._channel)
+
+
 class _GatewayAssociationEntity:
     """Shared Home Assistant device information for gateway controls."""
 
