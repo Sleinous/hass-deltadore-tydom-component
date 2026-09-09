@@ -6760,7 +6760,9 @@ class HADeviceRemovalButton(HADeviceAssociationButton):
     async def async_press(self) -> None:
         """Permanently remove this product from its TYDOM gateway."""
         if self._removal_callback is None:
-            raise HomeAssistantError("No safe TYDOM product-removal workflow is available")
+            raise HomeAssistantError(
+                "No safe TYDOM product-removal workflow is available"
+            )
         await self._removal_callback(self._device)
 
 
