@@ -103,6 +103,7 @@ class GatewayAssociationTests(IsolatedAsyncioTestCase):
 
         self.assertEqual(tydom_hub.association_category, "Volets")
         self.assertEqual(tydom_hub.association_product_label, "ACTIVE HOME KLINE")
+
     def test_tyxia_2600_uses_the_remote_discovery_profile(self) -> None:
         """Expose the official TYXIA 2600 profile as an emitter, not a controller."""
         choice = next(
