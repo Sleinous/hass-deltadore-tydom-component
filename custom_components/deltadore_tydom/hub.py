@@ -400,25 +400,26 @@ OFFICIAL_DISCOVERY_PROFILES: dict[str, DiscoveryProfile] = {
 
 
 # The TYXIA 2600 is not a generic radio product: its two physical buttons are
-# associated independently. Every physical step is performed with the chosen
-# channel, while the opposite channel validates the selected association mode.
+# associated independently. The setup starts on the chosen channel. Per the
+# product instructions, A cycles the input modes and B validates that choice.
 TYXIA_2600_ASSOCIATION_CHANNELS = ("Bouton A", "Bouton B")
 TYXIA_2600_ASSOCIATION_GUIDE = (
     "Parcours Home Assistant — ajout du TYXIA 2600 comme télécommande :",
     "1. Dans Home Assistant, choisissez d'abord la voie à associer : {channel}.",
     "2. Maintenez le bouton {button} physique pendant 6 secondes. Le voyant rouge "
     "s'allume, s'éteint, puis reste fixe : relâchez alors le bouton.",
-    "3. Le voyant vert clignote par séries. Appuyez sur {button} pour faire défiler "
-    "les modes, puis conservez le mode correspondant à l'association voulue.",
-    "4. Maintenez {other_button} pendant 3 secondes, jusqu'à l'allumage du voyant vert, "
+    "3. Le voyant vert clignote par séries. Appuyez brièvement sur A pour faire défiler "
+    "les modes, puis conservez celui correspondant au type d'interrupteur raccordé.",
+    "4. Maintenez B pendant 3 secondes, jusqu'à l'allumage fixe du voyant vert, "
     "pour valider le mode sélectionné.",
     "5. Dans Home Assistant, appuyez sur « Lancer l'écoute de la passerelle » "
     "avant de poursuivre avec le TYXIA 2600.",
     "6. Maintenez le bouton {button} physique pendant 3 secondes, jusqu'à ce que le "
     "voyant rouge clignote.",
     "7. Attendez pendant que l'association est en cours.",
-    "8. Lorsque la confirmation est demandée, appuyez sur le bouton de "
-    "l'interrupteur relié à la voie {button} ({channel}).",
+    "8. Lorsque la confirmation est demandée, appuyez sur l'interrupteur physique "
+    "relié à la voie {button} ({channel}) : ce n'est pas un nouvel appui sur "
+    "le bouton du module TYXIA.",
 )
 
 OFFICIAL_ASSOCIATION_CATALOG: dict[str, tuple[AssociationChoice, ...]] = {
@@ -1506,12 +1507,10 @@ class Hub:
             return ()
         channel = self._association_channel
         button = channel.removeprefix("Bouton ")
-        other_button = "B" if button == "A" else "A"
         return tuple(
             step.format(
                 channel=channel,
                 button=button,
-                other_button=other_button,
             )
             for step in TYXIA_2600_ASSOCIATION_GUIDE
         )

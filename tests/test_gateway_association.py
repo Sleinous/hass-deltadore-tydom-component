@@ -154,7 +154,7 @@ class GatewayAssociationTests(IsolatedAsyncioTestCase):
             "bouton B physique pendant 3 secondes",
             tydom_hub.association_instructions[6],
         )
-        self.assertIn("Maintenez A pendant 3 secondes", tydom_hub.association_instructions[4])
+        self.assertIn("Maintenez B pendant 3 secondes", tydom_hub.association_instructions[4])
         self.assertIn(
             "interrupteur relié à la voie B",
             tydom_hub.association_instructions[8],
