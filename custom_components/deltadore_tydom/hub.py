@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import copy
 import time
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -68,6 +69,8 @@ from .ha_entities import (
     HADeviceAssociationButton,
     HADeviceRemovalButton,
     HAGatewayAssociationCategorySelect,
+    HAGatewayAssociationChannelSelect,
+    HAGatewayAssociationGuideButton,
     HAGatewayAssociationProductSelect,
     HAGatewayAssociationUsageSelect,
     HAGatewayStartAssociationButton,
@@ -319,6 +322,31 @@ OFFICIAL_DISCOVERY_PROFILES: dict[str, DiscoveryProfile] = {
     "official:typassATL_X3D_direct": DiscoveryProfile("typassATL_X3D_direct", "X3D", "direct", "typassAtl"),
     "official:typassSaunier_X3D_direct": DiscoveryProfile("typassSaunier_X3D_direct", "X3D", "direct", "typassSaunier"),
     "official:weather_plt": DiscoveryProfile("weather_plt", "PltService", "", "weather"),
+}
+
+
+# The TYXIA 2600 is not a generic radio product: its two physical buttons are
+# associated independently. The official app starts gateway discovery only
+# after the user has selected the radio mode and confirmed it with button B.
+TYXIA_2600_ASSOCIATION_GUIDES: dict[str, tuple[str, ...]] = {
+    "Bouton A": (
+        "1. Maintenez A pendant 6 secondes, puis relâchez lorsque le voyant rouge reste fixe.",
+        "2. Attendez le clignotement vert par série de 1. Appuyez sur A pour "
+        "changer le nombre de flashs si nécessaire.",
+        "3. Maintenez B pendant 3 secondes, jusqu'à l'allumage du voyant vert.",
+        "4. Appuyez ici pour lancer l'écoute de la passerelle.",
+        "5. Maintenez A pendant 3 secondes jusqu'au clignotement rouge, puis "
+        "appuyez sur A pour confirmer.",
+    ),
+    "Bouton B": (
+        "1. Maintenez B pendant 6 secondes, puis relâchez lorsque le voyant rouge reste fixe.",
+        "2. Attendez le clignotement vert par série de 1. Appuyez sur A pour "
+        "changer le nombre de flashs si nécessaire.",
+        "3. Maintenez B pendant 3 secondes, jusqu'à l'allumage du voyant vert.",
+        "4. Appuyez ici pour lancer l'écoute de la passerelle.",
+        "5. Maintenez B pendant 3 secondes jusqu'au clignotement rouge, puis "
+        "appuyez sur B pour confirmer.",
+    ),
 }
 
 OFFICIAL_ASSOCIATION_CATALOG: dict[str, tuple[AssociationChoice, ...]] = {
@@ -690,12 +718,120 @@ def _get_local_association_hub(tydom_hub):
 
 
 async def remove_product_association(device) -> None:
-    """Remove one already-associated product from its TYDOM gateway."""
+    """Cleanly remove a product from the TYDOM gateway.
+
+    A radio DELETE alone is insufficient for devices created as a
+    ``relatedendpoints`` group (for example a TYXIA 2600): it leaves the
+    group's configuration in the gateway.  The official application removes
+    that group from both complete configuration files as well as deleting the
+    radio product.  Ordinary products are deliberately rejected here until
+    their references in user groups, scenarios and moments are handled too.
+    """
     device_id = getattr(device, "_id", None)
     tydom_client = getattr(device, "_tydom_client", None)
     if device_id is None or tydom_client is None:
         raise ValueError("The selected entity does not expose a TYDOM device")
-    await tydom_client.delete_device(device_id)
+
+    association_group_id = getattr(device, "association_group_id", None)
+    if association_group_id is None:
+        raise ValueError(
+            "Safe complete removal is not yet available for this product. "
+            "It may belong to user groups, scenarios or moments."
+        )
+
+    config = await tydom_client.get_config_file_document()
+    groups = await tydom_client.get_groups_file_document()
+    config_groups = config.get("groups")
+    group_memberships = groups.get("groups")
+    endpoints = config.get("endpoints")
+    if not all(
+        isinstance(value, list)
+        for value in (config_groups, group_memberships, endpoints)
+    ):
+        raise ValueError("The gateway returned an incomplete configuration")
+
+    group_id = str(association_group_id)
+    config_group = next(
+        (
+            group
+            for group in config_groups
+            if isinstance(group, dict) and str(group.get("id")) == group_id
+        ),
+        None,
+    )
+    group_membership = next(
+        (
+            group
+            for group in group_memberships
+            if isinstance(group, dict) and str(group.get("id")) == group_id
+        ),
+        None,
+    )
+    if config_group is None or group_membership is None:
+        raise ValueError(
+            "The dedicated association group is no longer present on the gateway"
+        )
+    if config_group.get("type") != "relatedendpoints":
+        raise ValueError(
+            "Safe complete removal is only available for dedicated "
+            "related-endpoints groups"
+        )
+
+    device_id = str(device_id)
+    member_ids = {
+        str(member.get("id"))
+        for member in group_membership.get("devices", [])
+        if isinstance(member, dict) and member.get("id") is not None
+    }
+    if device_id not in member_ids:
+        raise ValueError(
+            "The selected product is not a member of its dedicated association group"
+        )
+
+    updated_config = copy.deepcopy(config)
+    updated_config["groups"] = [
+        group
+        for group in config_groups
+        if not (isinstance(group, dict) and str(group.get("id")) == group_id)
+    ]
+    updated_config["endpoints"] = [
+        endpoint
+        for endpoint in endpoints
+        if not (
+            isinstance(endpoint, dict)
+            and str(endpoint.get("id_device")) == device_id
+        )
+    ]
+    updated_groups = copy.deepcopy(groups)
+    updated_groups["groups"] = [
+        group
+        for group in group_memberships
+        if not (isinstance(group, dict) and str(group.get("id")) == group_id)
+    ]
+
+    # Nothing is deleted from the radio until the two source-of-truth files
+    # have both been accepted.  If the second write or the radio DELETE fails,
+    # restore the original documents so the official app keeps a coherent view.
+    config_updated = False
+    groups_updated = False
+    try:
+        await tydom_client.post_config_file_document(updated_config)
+        config_updated = True
+        await tydom_client.post_groups_file_document(updated_groups)
+        groups_updated = True
+        await tydom_client.delete_device(device_id)
+    except Exception:
+        if groups_updated:
+            try:
+                await tydom_client.post_groups_file_document(groups)
+            except Exception:
+                LOGGER.exception("Unable to restore /groups/file after failed removal")
+        if config_updated:
+            try:
+                await tydom_client.post_config_file_document(config)
+            except Exception:
+                LOGGER.exception("Unable to restore /configs/file after failed removal")
+        raise
 
 
 class Hub:
@@ -772,6 +908,7 @@ class Hub:
         first_choice = get_association_choices(self._association_category)[0]
         self._association_product = first_choice.label
         self._association_profile = first_choice.profile_id
+        self._association_channel = "Bouton A"
         self._refresh_energy_buttons_created: set[str] = set()
         self._device_association_buttons_created: set[tuple[str, str]] = set()
         self._remote_battery_entities: dict[str, HARemoteBattery] = {}
@@ -955,10 +1092,16 @@ class Hub:
                 [
                     HAGatewayAssociationCategorySelect(self),
                     HAGatewayAssociationProductSelect(self),
+                    HAGatewayAssociationChannelSelect(self),
                     HAGatewayAssociationUsageSelect(self),
                 ]
             )
-            self.add_button_callback([HAGatewayStartAssociationButton(self)])
+            self.add_button_callback(
+                [
+                    HAGatewayAssociationGuideButton(self),
+                    HAGatewayStartAssociationButton(self),
+                ]
+            )
             self._association_controls_created = True
             LOGGER.debug("Gateway product-association controls created")
         return is_ready
@@ -1008,6 +1151,27 @@ class Hub:
         """Whether the current choice has a documented local install profile."""
         return self._association_profile is not None
 
+    @property
+    def association_channel_labels(self) -> tuple[str, ...]:
+        """Return independent physical channels for the selected product."""
+        if self._association_product == "TYXIA 2600":
+            return tuple(TYXIA_2600_ASSOCIATION_GUIDES)
+        return ()
+
+    @property
+    def association_channel_label(self) -> str | None:
+        """Return the selected physical channel, if this product has one."""
+        if not self.association_channel_labels:
+            return None
+        return self._association_channel
+
+    @property
+    def association_instructions(self) -> tuple[str, ...]:
+        """Return the app-derived procedure for the selected product/channel."""
+        if self._association_product != "TYXIA 2600":
+            return ()
+        return TYXIA_2600_ASSOCIATION_GUIDES[self._association_channel]
+
     def register_association_control(self, entity) -> None:
         """Register a gateway control that needs selection-state updates."""
         if entity not in self._association_controls:
@@ -1033,6 +1197,7 @@ class Hub:
         )
         self._association_product = choice.label
         self._association_profile = choice.profile_id
+        self._ensure_association_channel()
         self._notify_association_controls()
 
     def set_association_product(self, label: str) -> None:
@@ -1041,6 +1206,7 @@ class Hub:
             if choice.label == label:
                 self._association_product = label
                 self._association_profile = choice.profile_id
+                self._ensure_association_channel()
                 self._notify_association_controls()
                 return
         raise ValueError(
@@ -1060,6 +1226,21 @@ class Hub:
         )
         self._association_category = category
         self._association_profile = choice.profile_id
+        self._notify_association_controls()
+
+    def _ensure_association_channel(self) -> None:
+        """Keep the selected physical channel valid after a product change."""
+        choices = self.association_channel_labels
+        if choices and self._association_channel not in choices:
+            self._association_channel = choices[0]
+
+    def set_association_channel(self, channel: str) -> None:
+        """Choose a documented physical channel for the selected product."""
+        if channel not in self.association_channel_labels:
+            raise ValueError(
+                f"{channel!r} is not available for {self._association_product!r}"
+            )
+        self._association_channel = channel
         self._notify_association_controls()
 
     async def start_selected_product_association(self) -> None:
@@ -1645,6 +1826,14 @@ class Hub:
         if self.add_button_callback is None:
             return
 
+        # Scenarios, moments and groups are configuration objects, not radio
+        # products. In particular, TWC_UP/DOWN/STOP are three scenarios that
+        # form one virtual shutter cover. Giving each of them product-removal
+        # controls creates misleading device pages and can never remove a
+        # physical product.
+        if isinstance(device, (TydomScene, TydomMoment, TydomGroup)):
+            return
+
         buttons = []
         removal_key = (device.device_id, "remove_association")
         if (
@@ -1654,7 +1843,11 @@ class Hub:
                 getattr(getattr(device, "_tydom_client", None), "delete_device", None)
             )
         ):
-            buttons.append(HADeviceRemovalButton(device, self._hass))
+            buttons.append(
+                HADeviceRemovalButton(
+                    device, self._hass, remove_product_association
+                )
+            )
             self._device_association_buttons_created.add(removal_key)
 
         for command in (ASSOCIATION_COMMAND, IDENTIFY_COMMAND):
@@ -1895,10 +2088,16 @@ class Hub:
                 [
                     HAGatewayAssociationCategorySelect(self),
                     HAGatewayAssociationProductSelect(self),
+                    HAGatewayAssociationChannelSelect(self),
                     HAGatewayAssociationUsageSelect(self),
                 ]
             )
-            self.add_button_callback([HAGatewayStartAssociationButton(self)])
+            self.add_button_callback(
+                [
+                    HAGatewayAssociationGuideButton(self),
+                    HAGatewayStartAssociationButton(self),
+                ]
+            )
             self._association_controls_created = True
 
         LOGGER.info(
