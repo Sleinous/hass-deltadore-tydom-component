@@ -227,6 +227,48 @@ class TestRemoteControl(IsolatedAsyncioTestCase):
             {device.remote_model for device in devices}, {"TL 2000 Tyxal+"}
         )
 
+    async def test_unconfigured_x3d_remote_is_exposed_for_removal(self) -> None:
+        """A newly associated X3D remote must not be hidden without config data."""
+        device_id = 1788902774
+        unique_id = f"{device_id}_{device_id}"
+        handler_module.device_metadata[unique_id] = {
+            "battDefect": {"type": "boolean", "validity": "INFINITE"},
+            "action": {"type": "string", "validity": "REMOTE"},
+        }
+
+        devices = await self.handler.parse_devices_data(
+            [
+                {
+                    "id": device_id,
+                    "endpoints": [
+                        {
+                            "id": device_id,
+                            "error": 0,
+                            "data": [
+                                {
+                                    "name": "battDefect",
+                                    "validity": "upToDate",
+                                    "value": False,
+                                },
+                                {
+                                    "name": "action",
+                                    "validity": "upToDate",
+                                    "value": "TOGGLE",
+                                },
+                            ],
+                        }
+                    ],
+                }
+            ],
+            None,
+        )
+
+        self.assertEqual(len(devices), 1)
+        device = devices[0]
+        self.assertIsInstance(device, TydomRemoteControl)
+        self.assertEqual(device.remote_name, f"X3D remote control {device_id}")
+        self.assertEqual(device.button_number, 1)
+
     async def test_tyxia_1410_has_four_button_endpoints(self) -> None:
         """TYXIA 1410 discovery exposes four buttons under one remote."""
         device_id = 1693573310

@@ -2,6 +2,7 @@
 
 import asyncio
 import base64
+import copy
 import json
 import os
 import re
@@ -986,9 +987,64 @@ class TydomClient:
         )
 
     async def delete_device(self, device_id: str | int) -> None:
-        """Delete one product from the TYDOM gateway inventory."""
+        """Permanently delete one complete product from the TYDOM inventory.
+
+        This deliberately targets the parent device, not one of its endpoints.
+        A product such as a TYXIA 2600 can expose an endpoint per physical
+        button; deleting an endpoint merely removes that button and leaves the
+        product shell in the gateway inventory. The official product-removal
+        workflow uses the device route for a complete disassociation.
+        """
         safe_device_id = quote(str(device_id), safe="")
         await self.get_reply_to_request("DELETE", f"/devices/{safe_device_id}")
+
+    async def delete_group(self, group_id: str | int) -> None:
+        """Delete one dedicated TYDOM configuration group."""
+        safe_group_id = quote(str(group_id), safe="")
+        await self.get_reply_to_request("DELETE", f"/groups/{safe_group_id}")
+
+    @staticmethod
+    def _file_reply_document(
+        reply: list[dict] | None, path: str
+    ) -> dict[str, object]:
+        """Return the single JSON document returned by a TYDOM file endpoint."""
+        if not reply or not isinstance(reply[0], dict):
+            raise TydomClientApiClientCommunicationError(
+                f"TYDOM returned no JSON document for {path}"
+            )
+        return copy.deepcopy(reply[0])
+
+    async def get_config_file_document(self) -> dict[str, object]:
+        """Read a fresh complete ``/configs/file`` document."""
+        return self._file_reply_document(
+            await self.get_reply_to_request("GET", "/configs/file"),
+            "/configs/file",
+        )
+
+    async def get_groups_file_document(self) -> dict[str, object]:
+        """Read a fresh complete ``/groups/file`` document."""
+        return self._file_reply_document(
+            await self.get_reply_to_request("GET", "/groups/file"),
+            "/groups/file",
+        )
+
+    async def post_config_file_document(self, document: dict[str, object]) -> None:
+        """Replace the gateway configuration document with a validated snapshot."""
+        await self.get_reply_to_request("POST", "/configs/file", body=document)
+
+    async def post_groups_file_document(self, document: dict[str, object]) -> None:
+        """Replace the gateway group-membership document with a validated snapshot."""
+        await self.get_reply_to_request("POST", "/groups/file", body=document)
+
+    async def delete_endpoint(
+        self, device_id: str | int, endpoint_id: str | int
+    ) -> None:
+        """Delete one endpoint only, without removing its parent product."""
+        safe_device_id = quote(str(device_id), safe="")
+        safe_endpoint_id = quote(str(endpoint_id), safe="")
+        await self.get_reply_to_request(
+            "DELETE", f"/devices/{safe_device_id}/endpoints/{safe_endpoint_id}"
+        )
 
     async def get_local_claim(self):
         """Ask some information from Tydom."""

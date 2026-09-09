@@ -86,6 +86,7 @@ from homeassistant.components.button import ButtonEntity
 from homeassistant.components.number import NumberEntity
 from homeassistant.components.select import SelectEntity
 from homeassistant.components.event import EventDeviceClass, EventEntity
+from homeassistant.components import persistent_notification
 
 from .tydom.tydom_devices import (
     Tydom,
@@ -6692,6 +6693,33 @@ class HADeviceAssociationButton(ButtonEntity, HAEntity):
     @property
     def device_info(self) -> DeviceInfo:
         """Attach this control to the existing physical product."""
+        if isinstance(self._device, TydomInterrupter):
+            return self._enrich_device_info(
+                {
+                    "identifiers": {
+                        (DOMAIN, f"interrupter_{self._device.physical_device_id}")
+                    },
+                    "name": self._device.interrupter_name,
+                    "manufacturer": "Delta Dore",
+                    "model": self._device.interrupter_model,
+                }
+            )
+
+        if isinstance(self._device, TydomRemoteControl):
+            return self._enrich_device_info(
+                {
+                    "identifiers": {
+                        (
+                            DOMAIN,
+                            f"remote_control_{self._device.physical_device_id}",
+                        )
+                    },
+                    "name": self._device.remote_name,
+                    "manufacturer": "Delta Dore",
+                    "model": self._device.remote_model,
+                }
+            )
+
         device_info = self._get_device_info()
         info: DeviceInfo = {
             "identifiers": {(DOMAIN, self._device.device_id)},
@@ -6705,6 +6733,27 @@ class HADeviceAssociationButton(ButtonEntity, HAEntity):
     async def async_press(self) -> None:
         """Run the START command advertised by this endpoint."""
         await start_command(self._device, self._association_command)
+
+
+class HADeviceRemovalButton(HADeviceAssociationButton):
+    """Control for permanently removing one product."""
+
+    _attr_entity_registry_enabled_default = True
+
+    def __init__(self, device: TydomDevice, hass, removal_callback=None) -> None:
+        """Initialise an intentionally opt-in permanent-removal control."""
+        self.hass = hass
+        self._device = device
+        self._removal_callback = removal_callback
+        self._attr_icon = "mdi:link-variant-remove"
+        self._attr_name = "Dissocier définitivement l'appareil"
+        self._attr_unique_id = f"{device.device_id}_button_remove_association"
+
+    async def async_press(self) -> None:
+        """Permanently remove this product from its TYDOM gateway."""
+        if self._removal_callback is None:
+            raise HomeAssistantError("No safe TYDOM product-removal workflow is available")
+        await self._removal_callback(self._device)
 
 
 class _GatewayAssociationEntity:
@@ -6786,6 +6835,102 @@ class HAGatewayAssociationProductSelect(_GatewayAssociationEntity, SelectEntity)
         self._hub.set_association_product(option)
 
 
+class HAGatewayAssociationChannelSelect(_GatewayAssociationEntity, SelectEntity):
+    """Choose an independently associated channel where the product has one."""
+
+    _attr_icon = "mdi:gesture-tap-button"
+
+    def __init__(self, tydom_hub) -> None:
+        """Initialise the physical-channel selector."""
+        super().__init__(tydom_hub)
+        self._attr_unique_id = f"{tydom_hub.hub_id}_association_channel"
+        self._attr_name = "3. Voie à associer"
+
+    @property
+    def available(self) -> bool:
+        """Only expose this selector for products with independent channels."""
+        return bool(self._hub.association_channel_labels)
+
+    @property
+    def options(self) -> list[str]:
+        """Return physical channels documented for the selected product."""
+        return list(self._hub.association_channel_labels)
+
+    @property
+    def current_option(self) -> str | None:
+        """Return the selected physical channel."""
+        return self._hub.association_channel_label
+
+    @property
+    def extra_state_attributes(self) -> dict[str, list[str]]:
+        """Show the model-specific physical procedure in the entity dialog."""
+        return {"instructions": list(self._hub.association_instructions)}
+
+    async def async_select_option(self, option: str) -> None:
+        """Select a physical channel."""
+        self._hub.set_association_channel(option)
+
+
+class HAGatewayAssociationUsageSelect(_GatewayAssociationEntity, SelectEntity):
+    """Choose the supported application usage for the selected product."""
+
+    _attr_icon = "mdi:format-list-bulleted-type"
+
+    def __init__(self, tydom_hub) -> None:
+        """Initialise the product-usage selector."""
+        super().__init__(tydom_hub)
+        self._attr_unique_id = f"{tydom_hub.hub_id}_association_usage"
+        self._attr_name = "4. Usage / type d'association"
+
+    @property
+    def options(self) -> list[str]:
+        """Return only usages documented for the selected product."""
+        return list(self._hub.association_usage_labels)
+
+    @property
+    def current_option(self) -> str:
+        """Return the selected application usage."""
+        return self._hub.association_usage_label
+
+    async def async_select_option(self, option: str) -> None:
+        """Select a valid product usage and its exact discovery recipe."""
+        self._hub.set_association_usage(option)
+
+
+class HAGatewayAssociationGuideButton(_GatewayAssociationEntity, ButtonEntity):
+    """Display a model-specific association procedure in Home Assistant."""
+
+    _attr_icon = "mdi:book-open-variant"
+
+    def __init__(self, tydom_hub) -> None:
+        """Initialise the association guide button."""
+        super().__init__(tydom_hub)
+        self._attr_unique_id = f"{tydom_hub.hub_id}_association_guide"
+        self._attr_name = "5. Afficher le guide d'association"
+
+    @property
+    def available(self) -> bool:
+        """Only show a guide when the selected product has one."""
+        return bool(self._hub.association_instructions)
+
+    async def async_press(self) -> None:
+        """Create one updateable notification with the selected procedure."""
+        channel = self._hub.association_channel_label
+        title = f"{self._hub.association_product_label} — association {channel}"
+        steps = "\n\n".join(self._hub.association_instructions)
+        message = (
+            f"{steps}\n\n"
+            "Une fois l'étape 3 terminée, revenez ici, lancez l'écoute de la "
+            "passerelle, puis effectuez immédiatement l'étape 5."
+        )
+        persistent_notification.async_create(
+            self.hass,
+            message,
+            title=title,
+            notification_id=f"{DOMAIN}_{self._hub.hub_id}_association_guide",
+        )
+
+
 class HAGatewayStartAssociationButton(_GatewayAssociationEntity, ButtonEntity):
     """Start the generic add-product workflow on the selected gateway."""
 
@@ -6795,7 +6940,7 @@ class HAGatewayStartAssociationButton(_GatewayAssociationEntity, ButtonEntity):
         """Initialise the start-association button."""
         super().__init__(tydom_hub)
         self._attr_unique_id = f"{tydom_hub.hub_id}_start_product_association"
-        self._attr_name = "3. Démarrer l'association"
+        self._attr_name = "6. Lancer l'écoute de la passerelle"
 
     @property
     def available(self) -> bool:

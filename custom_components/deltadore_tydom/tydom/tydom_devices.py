@@ -987,6 +987,7 @@ class TydomInterrupter(TydomDevice):
         )
         info = interrupter_info or {}
         self._physical_device_id = str(info.get("physical_device_id", device_id))
+        self._association_group_id = info.get("group_id")
         self._interrupter_name = str(
             info.get("name", f"Wall switch {self._physical_device_id}")
         )
@@ -999,6 +1000,13 @@ class TydomInterrupter(TydomDevice):
     def physical_device_id(self) -> str:
         """Return the identifier shared by both wall-switch buttons."""
         return self._physical_device_id
+
+    @property
+    def association_group_id(self) -> str | None:
+        """Return the dedicated related-endpoints group, when TYDOM provides it."""
+        if self._association_group_id is None:
+            return None
+        return str(self._association_group_id)
 
     @property
     def interrupter_name(self) -> str:
