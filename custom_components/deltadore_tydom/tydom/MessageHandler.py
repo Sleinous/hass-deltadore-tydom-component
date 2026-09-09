@@ -350,8 +350,12 @@ class Reply(TypedDict):
 
 def _interrupter_model(tutorial_id: str) -> str:
     """Return a friendly wall-switch model from its tutorial identifier."""
+    if tutorial_id.startswith("switch_tyxia2310"):
+        return "TYXIA 2310"
     if tutorial_id.startswith("switch_tyxia2600"):
         return "TYXIA 2600"
+    if tutorial_id.startswith("switch_tyxia2700"):
+        return "TYXIA 2700"
     return "Delta Dore wall switch"
 
 

@@ -6,7 +6,9 @@ from unittest.mock import MagicMock, patch
 
 from custom_components.deltadore_tydom.hub import (
     ASSOCIATION_CATALOG,
+    GROUPABLE_ASSOCIATION_BY_LABEL,
     OFFICIAL_DISCOVERY_PROFILES,
+    configure_groupable_product,
     configure_tyxia_2600_interrupter,
     get_association_choices,
     get_install_payload,
@@ -58,8 +60,12 @@ class GatewayAssociationTests(IsolatedAsyncioTestCase):
         lighting = ASSOCIATION_CATALOG["Éclairages"]
         gate = ASSOCIATION_CATALOG["Portail"]
 
-        self.assertIn("light_x3d", {choice.profile_id for choice in lighting})
-        self.assertIn("light_x3d", {choice.profile_id for choice in gate})
+        self.assertIn(
+            "official:light_X3D_x3d_rm", {choice.profile_id for choice in lighting}
+        )
+        self.assertIn(
+            "official:light_X3D_x3d_rm", {choice.profile_id for choice in gate}
+        )
 
     def test_catalog_matches_the_official_application_group_order(self) -> None:
         """Keep the gateway flow familiar to users of the official app."""
@@ -90,14 +96,13 @@ class GatewayAssociationTests(IsolatedAsyncioTestCase):
         tydom_hub = object.__new__(Hub)
         tydom_hub._association_controls = []
         tydom_hub._association_category = "Éclairages"
+        tydom_hub._association_product = "TYXIA 4600"
         tydom_hub._association_profile = "light_x3d"
 
         tydom_hub.set_association_category("Volets")
 
         self.assertEqual(tydom_hub.association_category, "Volets")
-        self.assertEqual(
-            tydom_hub.association_product_label, "Récepteur volet roulant X3D"
-        )
+        self.assertEqual(tydom_hub.association_product_label, "ACTIVE HOME KLINE")
 
     def test_tyxia_2600_exposes_each_physical_button_and_its_guide(self) -> None:
         """Present the two TYDOM flows without mixing their button sequences."""
@@ -115,18 +120,18 @@ class GatewayAssociationTests(IsolatedAsyncioTestCase):
         )
         self.assertIn(
             "bouton A physique pendant 6 secondes",
-            tydom_hub.association_instructions[2],
+            tydom_hub.association_instructions[3],
         )
         self.assertIn(
             "bouton A physique pendant 3 secondes",
-            tydom_hub.association_instructions[6],
+            tydom_hub.association_instructions[7],
         )
         self.assertIn(
-            "Maintenez B pendant 3 secondes", tydom_hub.association_instructions[4]
+            "Maintenez B pendant 3 secondes", tydom_hub.association_instructions[5]
         )
         self.assertIn(
-            "interrupteur relié à la voie A",
-            tydom_hub.association_instructions[8],
+            "voie A (Bouton A)",
+            tydom_hub.association_instructions[9],
         )
 
         tydom_hub.set_association_channel("Bouton B")
@@ -137,19 +142,36 @@ class GatewayAssociationTests(IsolatedAsyncioTestCase):
         )
         self.assertIn(
             "bouton B physique pendant 6 secondes",
-            tydom_hub.association_instructions[2],
+            tydom_hub.association_instructions[3],
         )
         self.assertIn(
             "bouton B physique pendant 3 secondes",
-            tydom_hub.association_instructions[6],
+            tydom_hub.association_instructions[7],
         )
         self.assertIn(
-            "Maintenez B pendant 3 secondes", tydom_hub.association_instructions[4]
+            "Maintenez B pendant 3 secondes", tydom_hub.association_instructions[5]
         )
         self.assertIn(
-            "interrupteur relié à la voie B",
-            tydom_hub.association_instructions[8],
+            "voie B (Bouton B)",
+            tydom_hub.association_instructions[9],
         )
+
+    def test_groupable_product_is_hidden_on_an_unsupported_gateway(self) -> None:
+        """Do not expose a stale multi-channel flow on TYDOM 1/2 or Hub Tyxal+."""
+        tydom_hub = object.__new__(Hub)
+        tydom_hub._association_controls = []
+        tydom_hub._association_category = "Interrupteurs"
+        tydom_hub._association_product = "TYXIA 2600"
+        tydom_hub._association_profile = "official:remote_X3D_direct"
+        tydom_hub._association_channel = "Bouton A"
+        tydom_hub._id = "gateway"
+        tydom_hub.devices = {
+            "gateway": SimpleNamespace(mainReference="21800010")  # TYDOM 1.0
+        }
+
+        self.assertFalse(tydom_hub.association_product_supported)
+        self.assertEqual(tydom_hub.association_channel_labels, ())
+        self.assertEqual(tydom_hub.association_instructions, ())
 
     def test_official_products_hide_ambiguous_generic_recipes(self) -> None:
         """Known hardware must not be mixed with raw radio-profile choices."""
@@ -506,12 +528,15 @@ class GatewayAssociationTests(IsolatedAsyncioTestCase):
                                 "id_device": 42,
                                 "id_endpoint": 84,
                                 "name": "CG_DD_COMMON_BUTTONA",
+                                "picto": "picto_interrupter",
                                 "first_usage": "interrupter",
                                 "last_usage": "interrupter",
                                 "widget_behavior": {
                                     "action": "TOGGLE",
                                     "tutorial_id": "switch_tyxia2600_btn_a",
                                 },
+                                "anticipation_start": False,
+                                "skill": "TYDOM_X3D",
                             },
                             {
                                 "id_device": 42,
@@ -561,6 +586,54 @@ class GatewayAssociationTests(IsolatedAsyncioTestCase):
                 ),
             ],
         )
+
+    async def test_tl2000_uses_the_same_safe_grouping_transaction(self) -> None:
+        """A remote-control channel gets an app-visible related-endpoints group."""
+        config = {"endpoints": [], "groups": []}
+        groups = {"groups": []}
+        calls: list[tuple[str, dict]] = []
+
+        async def get_config_file_document() -> dict:
+            return config
+
+        async def get_groups_file_document() -> dict:
+            return groups
+
+        async def post_config_file_document(document: dict) -> None:
+            calls.append(("config", document))
+
+        async def post_groups_file_document(document: dict) -> None:
+            calls.append(("groups", document))
+
+        device = SimpleNamespace(
+            _id="42",
+            _endpoint="84",
+            _tydom_client=SimpleNamespace(
+                get_config_file_document=get_config_file_document,
+                get_groups_file_document=get_groups_file_document,
+                post_config_file_document=post_config_file_document,
+                post_groups_file_document=post_groups_file_document,
+            ),
+        )
+
+        with patch(
+            "custom_components.deltadore_tydom.hub.secrets.randbelow",
+            return_value=11,
+        ):
+            name = await configure_groupable_product(
+                device, GROUPABLE_ASSOCIATION_BY_LABEL["TL 2000"], "Bouton 1"
+            )
+
+        self.assertEqual(name, "Télécommande 1")
+        endpoint = calls[0][1]["endpoints"][0]
+        group = calls[0][1]["groups"][0]
+        self.assertEqual(endpoint["name"], "CG_DD_COMMON_BUTTON1")
+        self.assertEqual(endpoint["last_usage"], "remoteControl")
+        self.assertEqual(endpoint["widget_behavior"]["tutorial_id"], "tl2000_btn_1")
+        self.assertEqual(group["name"], "Télécommande 1")
+        self.assertEqual(group["usage"], "remoteControl")
+        self.assertEqual(group["widget_behavior"]["tutorial_id"], "tl2000")
+        self.assertEqual(calls[1][0], "groups")
 
     async def test_isolated_tyxia_2600_button_removal_updates_config_then_radio(
         self,
