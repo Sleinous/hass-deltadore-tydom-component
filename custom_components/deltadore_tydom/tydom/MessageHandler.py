@@ -2,6 +2,7 @@
 
 import asyncio
 import contextlib
+import copy
 import json
 import re
 import time
@@ -139,6 +140,30 @@ def _is_tyxia_4910_other(uid: str) -> bool:
     return is_binary_tyxia_receiver_profile(device_metadata.get(uid))
 
 
+def _is_unconfigured_x3d_remote(
+    uid: str, endpoint: dict[str, Any]
+) -> bool:
+    """Return whether an endpoint is a radio remote without TYDOM config data.
+
+    A freshly discovered X3D remote is not returned in ``/configs/file`` on
+    some TYDOM gateways. Its metadata is nevertheless distinctive: the only
+    usable state is an action with REMOTE validity. Keeping it visible allows
+    the user to receive button events and to remove the radio association from
+    Home Assistant.
+    """
+    action_metadata = device_metadata.get(uid, {}).get("action", {})
+    if action_metadata.get("validity") != "REMOTE":
+        return False
+
+    data = endpoint.get("data", [])
+    return any(
+        item.get("name") == "action"
+        and item.get("validity") == "upToDate"
+        for item in data
+        if isinstance(item, dict)
+    )
+
+
 # Device dict for parsing
 device_name = {}
 device_endpoint = {}
@@ -153,6 +178,11 @@ groups_metadata = {}  # Store group metadata from /configs/file: {group_id: {"us
 groups_data = {}  # Store groups data: {group_id: {"devices": [device_ids], "name": group_name}}
 endpoint_config = {}  # Store endpoint-specific configuration from /configs/file
 remote_control_info = {}  # Store physical remote and button details by endpoint UID
+# Complete file snapshots are required when the gateway configuration must be
+# updated.  The normal lookup dictionaries above intentionally retain only the
+# fields used to create HA entities and cannot safely be written back.
+config_file_data: dict[str, Any] | None = None
+groups_file_data: dict[str, Any] | None = None
 
 SUPPORTED_CONTROL_GROUP_USAGES = {"awning", "light", "plug", "shutter"}
 TOTAL_GROUP_NAMES = {
@@ -567,6 +597,20 @@ class MessageHandler:
         if event := self._end_reply_events.pop(transaction_id, None):
             event.set()
 
+    def _complete_empty_reply(self, transaction_id: str) -> None:
+        """Complete a tracked request acknowledged without a response body."""
+        event = self._end_reply_events.pop(transaction_id, None)
+        if event is None:
+            return
+
+        self._cdata_replies.insert(
+            0,
+            Reply(transaction_id=transaction_id, events=[], done=True),
+        )
+        if len(self._cdata_replies) > _MAX_REPLIES_SIZE:
+            self._cdata_replies.pop()
+        event.set()
+
     async def route_response(self, bytes_str: bytes) -> list["TydomDevice"] | None:
         """
         Identify message type and dispatch the result.
@@ -641,15 +685,34 @@ class MessageHandler:
                     transaction_id,
                     uri_origin,
                 )
+                if transaction_id:
+                    self._complete_empty_reply(transaction_id)
                 return None
 
             try:
-                return await self.parse_response(
+                devices = await self.parse_response(
                     parsed_message.body,
                     uri_origin,
                     parsed_message.headers.get("content-type"),
                     transaction_id=transaction_id if transaction_id else None,
                 )
+                # Most configuration endpoints respond with one JSON document,
+                # not with cdata.  Preserve that document for callers which
+                # deliberately wait for a fresh file before modifying it.
+                # cdata requests complete themselves in parse_devices_cdata.
+                if transaction_id and transaction_id in self._end_reply_events:
+                    event = self._end_reply_events.pop(transaction_id)
+                    parsed: Any = parsed_message.body
+                    with contextlib.suppress(json.decoder.JSONDecodeError):
+                        parsed = json.loads(parsed_message.body or b"null")
+                    self._cdata_replies.insert(
+                        0,
+                        Reply(transaction_id=transaction_id, events=[parsed], done=True),
+                    )
+                    if len(self._cdata_replies) > _MAX_REPLIES_SIZE:
+                        self._cdata_replies.pop()
+                    event.set()
+                return devices
             except BaseException as e:
                 LOGGER.error(
                     "Error when parsing tydom message (%s)", bytes_str, exc_info=e
@@ -1170,7 +1233,12 @@ class MessageHandler:
     @staticmethod
     async def parse_config_data(parsed, transaction_id):
         """Parse config data."""
+        global config_file_data
         LOGGER.debug("parse_config_data : %s", parsed)
+        if not isinstance(parsed, dict):
+            LOGGER.warning("Ignoring malformed /configs/file response: %s", parsed)
+            return []
+        config_file_data = copy.deepcopy(parsed)
         for i in parsed["endpoints"]:
             device_unique_id = str(i["id_endpoint"]) + "_" + str(i["id_device"])
 
@@ -1398,6 +1466,45 @@ class MessageHandler:
                     # Get device name and type first to check if device is registered
                     name_of_id = self.get_name_from_id(unique_id)
                     type_of_id = self.get_type_from_id(unique_id)
+
+                    if (
+                        # Wait for /configs/file before treating an unknown
+                        # endpoint as a generic remote.  During startup the
+                        # data reply can arrive first; creating the fallback
+                        # object then prevents a subsequently configured
+                        # TYXIA 2600 button from becoming an interrupter.
+                        config_file_data is not None
+                        and (not name_of_id or not type_of_id)
+                        and _is_unconfigured_x3d_remote(unique_id, endpoint)
+                    ):
+                        name_of_id = f"X3D remote control {device_id}"
+                        type_of_id = "remoteControl"
+                        device_name[unique_id] = name_of_id
+                        device_type[unique_id] = type_of_id
+                        remote_control_info.setdefault(
+                            unique_id,
+                            {
+                                "physical_device_id": str(device_id),
+                                "name": name_of_id,
+                                "model": "Delta Dore X3D remote control",
+                                "button_number": 1,
+                                "configured_action": next(
+                                    (
+                                        str(item.get("value"))
+                                        for item in endpoint.get("data", [])
+                                        if item.get("name") == "action"
+                                        and item.get("value") != "IDLE"
+                                    ),
+                                    "TOGGLE",
+                                ),
+                            },
+                        )
+                        LOGGER.info(
+                            "Discovered unconfigured X3D remote endpoint "
+                            "(device_id=%s, endpoint_id=%s)",
+                            device_id,
+                            endpoint_id,
+                        )
 
                     # Check if device is registered in configuration
                     if not name_of_id or name_of_id == "":
@@ -1727,7 +1834,7 @@ class MessageHandler:
                                 ):
                                     data["eventAlarm"] = event
 
-                            if type_of_id == "conso":
+                            if type_of_id in {"conso", "plug"}:
                                 data.update(_parse_energy_cdata_element(elem))
 
                             elif type_of_id == "alarm" and transaction_id not in (
@@ -1904,10 +2011,12 @@ class MessageHandler:
 
     async def parse_groups_file(self, parsed, transaction_id):
         """Parse groups file and create TydomGroup devices."""
+        global groups_file_data
         LOGGER.debug("parse_groups_file : %s", parsed)
         devices = []
         # Store groups data for resolving grpAct in scenarios
         if parsed and isinstance(parsed, dict):
+            groups_file_data = copy.deepcopy(parsed)
             groups = parsed.get("groups", [])
             if isinstance(groups, list):
                 for group in groups:

@@ -384,6 +384,63 @@ class TestManagedConnection(IsolatedAsyncioTestCase):
 
         self.assertEqual(client._password, "password")
 
+    async def test_delete_device_uses_parent_device_route(self) -> None:
+        """Permanent removal deletes the complete product rather than one endpoint."""
+        client = self._client()
+        client.get_reply_to_request = AsyncMock(return_value=[])
+
+        await client.delete_device("device/1")
+
+        client.get_reply_to_request.assert_awaited_once_with(
+            "DELETE", "/devices/device%2F1"
+        )
+
+    async def test_delete_group_uses_group_route(self) -> None:
+        """Related-endpoints groups use their dedicated group resource."""
+        client = self._client()
+        client.get_reply_to_request = AsyncMock(return_value=[])
+
+        await client.delete_group("group/1")
+
+        client.get_reply_to_request.assert_awaited_once_with(
+            "DELETE", "/groups/group%2F1"
+        )
+
+    async def test_file_document_requests_preserve_the_complete_json(self) -> None:
+        """Dedicated-group removal reads and writes complete gateway files."""
+        client = self._client()
+        config = {"endpoints": [], "groups": []}
+        groups = {"groups": []}
+        client.get_reply_to_request = AsyncMock(
+            side_effect=[[[config]], [[groups]], [], []]
+        )
+
+        self.assertEqual(await client.get_config_file_document(), config)
+        self.assertEqual(await client.get_groups_file_document(), groups)
+        await client.post_config_file_document(config)
+        await client.post_groups_file_document(groups)
+
+        self.assertEqual(
+            client.get_reply_to_request.await_args_list,
+            [
+                call("GET", "/configs/file"),
+                call("GET", "/groups/file"),
+                call("POST", "/configs/file", body=config),
+                call("POST", "/groups/file", body=groups),
+            ],
+        )
+
+    async def test_delete_endpoint_keeps_the_channel_specific_route(self) -> None:
+        """Endpoint removal remains distinct from complete product removal."""
+        client = self._client()
+        client.get_reply_to_request = AsyncMock(return_value=[])
+
+        await client.delete_endpoint("device/1", "endpoint 2")
+
+        client.get_reply_to_request.assert_awaited_once_with(
+            "DELETE", "/devices/device%2F1/endpoints/endpoint%202"
+        )
+
     async def test_set_local_gateway_password_rejects_cloud_mediation(self) -> None:
         """The password-changing API must remain a direct local operation."""
         client = TydomClient(
@@ -431,12 +488,26 @@ class TestManagedConnection(IsolatedAsyncioTestCase):
         client._message_handler.create_alarm_command_waiter.return_value = waiter
         client.send_bytes = AsyncMock()
 
-        await client._put_alarm_cdata("20", "10", "123456", "ON")
+        confirmed = await client._put_alarm_cdata("20", "10", "123456", "ON")
+
+        self.assertTrue(confirmed)
 
         request = client.send_bytes.await_args.args[0].decode("ascii")
         self.assertIn("PUT /devices/20/endpoints/10/cdata?name=alarmCmd", request)
         self.assertIn("Transac-Id: 0", request)
         self.assertIn('{"value": "ON", "pwd": "123456"}', request)
+
+    async def test_silent_alarm_command_reports_unconfirmed_result(self) -> None:
+        """A gateway without a command outcome must not look like an ACK."""
+        client = self._client()
+        waiter = asyncio.get_running_loop().create_future()
+        waiter.set_exception(TimeoutError())
+        client._message_handler.create_alarm_command_waiter.return_value = waiter
+        client.send_bytes = AsyncMock()
+
+        confirmed = await client._put_alarm_cdata("20", "10", "123456", "ON")
+
+        self.assertFalse(confirmed)
 
     async def test_denied_zone_alarm_command_raises(self) -> None:
         """A gateway DENIED result must reach the Home Assistant action."""

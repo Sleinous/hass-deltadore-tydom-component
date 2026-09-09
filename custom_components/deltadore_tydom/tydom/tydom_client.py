@@ -2,6 +2,7 @@
 
 import asyncio
 import base64
+import copy
 import json
 import os
 import re
@@ -543,10 +544,21 @@ class TydomClient:
                         "Could't find WWW-Authenticate header"
                     )
 
+                re_matcher = re.match(
+                    '.*nonce="([a-zA-Z0-9+=]+)".*',
+                    www_authenticate,
+                )
+                realm_matcher = re.match(
+                    r'.*realm="([^"]+)".*',
+                    www_authenticate,
+                )
                 response.close()
 
                 ws_headers = {
-                    "Authorization": self.build_digest_headers(www_authenticate)
+                    "Authorization": self.build_digest_headers(
+                        re_matcher.group(1),
+                        realm_matcher.group(1) if realm_matcher else None,
+                    )
                 }
 
             connection = await session.ws_connect(
@@ -886,12 +898,17 @@ class TydomClient:
         """Handle a pong response and keep the pending ping counter non-negative."""
         self.pending_pings = max(0, self.pending_pings - 1)
 
-    def build_digest_headers(self, www_authenticate: str) -> str:
+    def build_digest_headers(self, nonce, realm=None):
         """Build the headers of Digest Authentication."""
         digest_auth = HTTPDigestAuth(self._mac, self._password)
-        challenge = _parse_digest_challenge(www_authenticate)
-        digest_auth._thread_local.chal = challenge
-        digest_auth._thread_local.last_nonce = challenge["nonce"]
+        chal = {}
+        chal["nonce"] = nonce
+        chal["realm"] = realm or (
+            "ServiceMedia" if self._remote_mode is True else "protected area"
+        )
+        chal["qop"] = "auth"
+        digest_auth._thread_local.chal = chal
+        digest_auth._thread_local.last_nonce = nonce
         digest_auth._thread_local.nonce_count = 1
         digest = digest_auth.build_digest_header(
             "GET",
@@ -1173,9 +1190,64 @@ class TydomClient:
         )
 
     async def delete_device(self, device_id: str | int) -> None:
-        """Delete one product from the TYDOM gateway inventory."""
+        """Permanently delete one complete product from the TYDOM inventory.
+
+        This deliberately targets the parent device, not one of its endpoints.
+        A product such as a TYXIA 2600 can expose an endpoint per physical
+        button; deleting an endpoint merely removes that button and leaves the
+        product shell in the gateway inventory. The official product-removal
+        workflow uses the device route for a complete disassociation.
+        """
         safe_device_id = quote(str(device_id), safe="")
         await self.get_reply_to_request("DELETE", f"/devices/{safe_device_id}")
+
+    async def delete_group(self, group_id: str | int) -> None:
+        """Delete one dedicated TYDOM configuration group."""
+        safe_group_id = quote(str(group_id), safe="")
+        await self.get_reply_to_request("DELETE", f"/groups/{safe_group_id}")
+
+    @staticmethod
+    def _file_reply_document(
+        reply: list[dict] | None, path: str
+    ) -> dict[str, object]:
+        """Return the single JSON document returned by a TYDOM file endpoint."""
+        if not reply or not isinstance(reply[0], dict):
+            raise TydomClientApiClientCommunicationError(
+                f"TYDOM returned no JSON document for {path}"
+            )
+        return copy.deepcopy(reply[0])
+
+    async def get_config_file_document(self) -> dict[str, object]:
+        """Read a fresh complete ``/configs/file`` document."""
+        return self._file_reply_document(
+            await self.get_reply_to_request("GET", "/configs/file"),
+            "/configs/file",
+        )
+
+    async def get_groups_file_document(self) -> dict[str, object]:
+        """Read a fresh complete ``/groups/file`` document."""
+        return self._file_reply_document(
+            await self.get_reply_to_request("GET", "/groups/file"),
+            "/groups/file",
+        )
+
+    async def post_config_file_document(self, document: dict[str, object]) -> None:
+        """Replace the gateway configuration document with a validated snapshot."""
+        await self.get_reply_to_request("POST", "/configs/file", body=document)
+
+    async def post_groups_file_document(self, document: dict[str, object]) -> None:
+        """Replace the gateway group-membership document with a validated snapshot."""
+        await self.get_reply_to_request("POST", "/groups/file", body=document)
+
+    async def delete_endpoint(
+        self, device_id: str | int, endpoint_id: str | int
+    ) -> None:
+        """Delete one endpoint only, without removing its parent product."""
+        safe_device_id = quote(str(device_id), safe="")
+        safe_endpoint_id = quote(str(endpoint_id), safe="")
+        await self.get_reply_to_request(
+            "DELETE", f"/devices/{safe_device_id}/endpoints/{safe_endpoint_id}"
+        )
 
     async def get_local_claim(self):
         """Ask some information from Tydom."""
@@ -1715,19 +1787,23 @@ class TydomClient:
         value=None,
         zone_id=None,
         legacy_zones=False,
-    ):
-        """Configure alarm mode."""
+    ) -> bool:
+        """Configure alarm mode and report whether the result was confirmed."""
         if legacy_zones and zone_id not in (None, ""):
             zones_array = str(zone_id).split(",")
+            confirmed = True
             for zone in zones_array:
-                await self._put_alarm_cdata(
-                    device_id, endpoint_id, alarm_pin, value, zone, legacy_zones
+                confirmed = (
+                    await self._put_alarm_cdata(
+                        device_id, endpoint_id, alarm_pin, value, zone, legacy_zones
+                    )
+                    and confirmed
                 )
-            return
+            return confirmed
 
         # Global legacy commands such as disarm have no zone. They still use
         # alarmCmd and must not be dropped by the legacy zone dispatcher.
-        await self._put_alarm_cdata(
+        return await self._put_alarm_cdata(
             device_id, endpoint_id, alarm_pin, value, zone_id, legacy_zones
         )
 
@@ -1739,8 +1815,13 @@ class TydomClient:
         value=None,
         zone_id=None,
         legacy_zones=False,
-    ):
-        """Configure alarm mode."""
+    ) -> bool:
+        """Configure alarm mode and await its asynchronous result.
+
+        ``False`` means the gateway did not publish an outcome. Older
+        gateways can still execute the command in that case, so callers must
+        not report a failure but also must not treat it as confirmed.
+        """
         # Credits to @mgcrea on github !
         # AWAY # "PUT /devices/{}/endpoints/{}/cdata?name=alarmCmd HTTP/1.1\r\ncontent-length: 29\r\ncontent-type: application/json; charset=utf-8\r\ntransac-id: request_124\r\n\r\n\r\n{"value":"ON","pwd":{}}\r\n\r\n"
         # HOME "PUT /devices/{}/endpoints/{}/cdata?name=zoneCmd HTTP/1.1\r\ncontent-length: 41\r\ncontent-type: application/json; charset=utf-8\r\ntransac-id: request_46\r\n\r\n\r\n{"value":"ON","pwd":"{}","zones":[1]}\r\n\r\n"
@@ -1804,9 +1885,10 @@ class TydomClient:
                 # Older gateways may execute alarm commands without publishing
                 # a command result. Preserve that established fire-and-forget
                 # behaviour rather than turning a successful command into an
-                # apparent Home Assistant failure.
+                # apparent Home Assistant failure. Retain the uncertainty for
+                # callers that need to react to a refused arm command.
                 LOGGER.debug("No asynchronous result received for %s", cmd)
-                return
+                return False
         finally:
             self._message_handler.remove_alarm_command_waiter(
                 str(device_id), str(endpoint_id), cmd, waiter
@@ -1815,6 +1897,7 @@ class TydomClient:
         result = str(reply.get("values", {}).get("result"))
         if result != "ACK":
             raise TydomAlarmCommandError(cmd, result)
+        return True
 
     async def put_ackevents_cdata(self, device_id, endpoint_id=None, alarm_pin=None):
         """Acknowledge alarm events using the command supported by the gateway.
