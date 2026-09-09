@@ -69,7 +69,7 @@ from .ha_entities import (
     HAButton,
     HADeviceAssociationButton,
     HADeviceRemovalButton,
-    HATyxia2600FinalizeAssociationButton,
+    HAGroupableProductFinalizeAssociationButton,
     HAGatewayAssociationCategorySelect,
     HAGatewayAssociationChannelSelect,
     HAGatewayAssociationGuideButton,
@@ -112,6 +112,32 @@ class AssociationChoice:
 
     label: str
     profile_id: str | None
+
+
+@dataclass(frozen=True, slots=True)
+class GroupableAssociationChannel:
+    """One independently-associated channel of an official product."""
+
+    label: str
+    config_name: str
+    tutorial_id: str
+
+
+@dataclass(frozen=True, slots=True)
+class GroupableAssociationProduct:
+    """Official post-discovery configuration for a multi-channel product."""
+
+    label: str
+    category: str
+    usage: str
+    usage_label: str
+    tutorial_id: str
+    group_picto: str
+    endpoint_picto: str
+    name_prefix: str
+    gateway_refs: frozenset[str]
+    channels: tuple[GroupableAssociationChannel, ...]
+    guide: tuple[str, ...]
 
 
 # These profiles are the request values used by the official TYDOM app. The
@@ -401,9 +427,8 @@ OFFICIAL_DISCOVERY_PROFILES: dict[str, DiscoveryProfile] = {
 # The TYXIA 2600 is not a generic radio product: its two physical buttons are
 # associated independently. The setup starts on the chosen channel. Per the
 # product instructions, A cycles the input modes and B validates that choice.
-TYXIA_2600_ASSOCIATION_CHANNELS = ("Bouton A", "Bouton B")
 TYXIA_2600_ASSOCIATION_GUIDE = (
-    "Parcours Home Assistant — ajout du TYXIA 2600 comme télécommande :",
+    "Parcours Home Assistant — ajout du TYXIA 2600 comme interrupteur :",
     "1. Dans Home Assistant, choisissez d'abord la voie à associer : {channel}.",
     "   Le module peut n'avoir qu'une seule voie raccordée : n'ajoutez que les voies réellement utilisées.",
     "2. Maintenez le bouton {button} physique pendant 6 secondes. Le voyant rouge "
@@ -421,6 +446,182 @@ TYXIA_2600_ASSOCIATION_GUIDE = (
     "relié à la voie {button} ({channel}) : ce n'est pas un nouvel appui sur "
     "le bouton du module TYXIA.",
 )
+
+
+# These are the six active ``groupable`` products in the official TYDOM 4.20
+# catalogue.  A radio discovery alone is deliberately not enough for them:
+# each discovered channel must be written to /configs/file and linked through
+# a related-endpoints group in /groups/file.  The guide texts are transcribed
+# from the French tutorial resources embedded in the official application.
+MODERN_TYDOM_GATEWAY_REFS = frozenset({"25170010", "24930010", "24900010", "27170010"})
+
+GROUPABLE_ASSOCIATION_PRODUCTS: tuple[GroupableAssociationProduct, ...] = (
+    GroupableAssociationProduct(
+        label="TL 2000",
+        category="Télécommandes et claviers",
+        usage="remoteControl",
+        usage_label="télécommande",
+        tutorial_id="tl2000",
+        group_picto="picto_remote_control",
+        endpoint_picto="default_device",
+        name_prefix="Télécommande",
+        gateway_refs=MODERN_TYDOM_GATEWAY_REFS,
+        channels=(
+            GroupableAssociationChannel(
+                "Bouton 1", "CG_DD_COMMON_BUTTON1", "tl2000_btn_1"
+            ),
+            GroupableAssociationChannel(
+                "Bouton 2", "CG_DD_COMMON_BUTTON2", "tl2000_btn_2"
+            ),
+        ),
+        guide=(
+            "Parcours Home Assistant — ajout d'une voie de TL 2000 :",
+            "1. Vérifiez la présence du logo « Works with Tydom » au dos de la télécommande.",
+            "2. Maintenez simultanément 1 et 2 pendant 5 secondes, jusqu'au voyant orange.",
+            "3. Appuyez une fois sur {button}. Continuez lorsque le voyant clignote par séries de 4 ; un nouvel appui sur {button} change ce nombre.",
+            "4. Si le voyant clignote encore, appuyez sur ON pour qu'il devienne vert.",
+            "5. Dans Home Assistant, appuyez sur « Lancer l'écoute de la passerelle ».",
+            "6. Maintenez simultanément ON et {button} pendant 5 secondes, jusqu'au voyant rouge.",
+            "7. Attendez la détection par la passerelle, puis appuyez sur {button} pour confirmer.",
+        ),
+    ),
+    GroupableAssociationProduct(
+        label="TYXIA 1410",
+        category="Télécommandes et claviers",
+        usage="remoteControl",
+        usage_label="télécommande",
+        tutorial_id="rcu_tyxia1410",
+        group_picto="picto_remote_control",
+        endpoint_picto="default_device",
+        name_prefix="Télécommande",
+        gateway_refs=MODERN_TYDOM_GATEWAY_REFS,
+        channels=(
+            GroupableAssociationChannel(
+                "Bouton 1", "CG_DD_COMMON_BUTTON1", "rcu_tyxia1410_btn_1"
+            ),
+            GroupableAssociationChannel(
+                "Bouton 2", "CG_DD_COMMON_BUTTON2", "rcu_tyxia1410_btn_2"
+            ),
+            GroupableAssociationChannel(
+                "Bouton 3", "CG_DD_COMMON_BUTTON3", "rcu_tyxia1410_btn_3"
+            ),
+            GroupableAssociationChannel(
+                "Bouton 4", "CG_DD_COMMON_BUTTON4", "rcu_tyxia1410_btn_4"
+            ),
+        ),
+        guide=(
+            "Parcours Home Assistant — ajout d'un bouton de TYXIA 1410 :",
+            "1. Vérifiez la présence du logo « Works with Tydom » au dos de la télécommande.",
+            "2. Dans Home Assistant, appuyez sur « Lancer l'écoute de la passerelle ».",
+            "3. Maintenez {button} pendant 5 secondes : le voyant rouge clignote. Relâchez puis attendez quelques secondes.",
+            "4. Lorsque la confirmation est demandée, appuyez sur {button} pour valider l'association.",
+        ),
+    ),
+    GroupableAssociationProduct(
+        label="CLE 8000",
+        category="Télécommandes et claviers",
+        usage="remoteControl",
+        usage_label="clavier",
+        tutorial_id="cle8000",
+        group_picto="picto_remote_control",
+        endpoint_picto="default_device",
+        name_prefix="Clavier",
+        gateway_refs=MODERN_TYDOM_GATEWAY_REFS,
+        channels=(
+            GroupableAssociationChannel(
+                "Touche A", "CG_DD_COMMON_KEYA", "cle8000_btn_1"
+            ),
+            GroupableAssociationChannel(
+                "Touche B", "CG_DD_COMMON_KEYB", "cle8000_btn_2"
+            ),
+        ),
+        guide=(
+            "Parcours Home Assistant — ajout d'une touche de CLE 8000 :",
+            "1. Vérifiez la présence du logo « Works with Tydom » au dos du clavier.",
+            "2. Maintenez la touche 2 jusqu'au clignotement vert par séries de 1. La touche 5 change le nombre de clignotements.",
+            "3. Dans Home Assistant, appuyez sur « Lancer l'écoute de la passerelle ».",
+            "4. Appuyez sur {button} pour lancer l'association. Si le voyant s'est éteint, recommencez l'étape 2 puis validez avec {button}.",
+            "5. Saisissez le code du clavier, puis appuyez sur {button} pour confirmer l'association.",
+        ),
+    ),
+    GroupableAssociationProduct(
+        label="TYXIA 2310",
+        category="Interrupteurs",
+        usage="interrupter",
+        usage_label="interrupteur",
+        tutorial_id="switch_tyxia2310",
+        group_picto="picto_interrupter",
+        endpoint_picto="picto_interrupter",
+        name_prefix="Interrupteur",
+        gateway_refs=MODERN_TYDOM_GATEWAY_REFS,
+        channels=(
+            GroupableAssociationChannel(
+                "Bouton 1", "CG_DD_COMMON_BUTTON1", "switch_tyxia2310_btn_1"
+            ),
+            GroupableAssociationChannel(
+                "Bouton 2", "CG_DD_COMMON_BUTTON2", "switch_tyxia2310_btn_2"
+            ),
+        ),
+        guide=(
+            "Parcours Home Assistant — ajout d'un bouton de TYXIA 2310 :",
+            "1. Appuyez une fois sur T2, au dos de l'interrupteur. Continuez lorsque le voyant frontal clignote par séries de 1 ; T2 change ce nombre.",
+            "2. Dans Home Assistant, appuyez sur « Lancer l'écoute de la passerelle ».",
+            "3. Maintenez {button} pendant 3 secondes, jusqu'à l'allumage du voyant.",
+            "4. Lorsque la confirmation est demandée, appuyez sur {button} pour valider l'association.",
+        ),
+    ),
+    GroupableAssociationProduct(
+        label="TYXIA 2600",
+        category="Interrupteurs",
+        usage="interrupter",
+        usage_label="interrupteur",
+        tutorial_id="switch_tyxia2600",
+        group_picto="picto_interrupter",
+        endpoint_picto="picto_interrupter",
+        name_prefix="Interrupteur",
+        gateway_refs=MODERN_TYDOM_GATEWAY_REFS,
+        channels=(
+            GroupableAssociationChannel(
+                "Bouton A", "CG_DD_COMMON_BUTTONA", "switch_tyxia2600_btn_a"
+            ),
+            GroupableAssociationChannel(
+                "Bouton B", "CG_DD_COMMON_BUTTONB", "switch_tyxia2600_btn_b"
+            ),
+        ),
+        guide=TYXIA_2600_ASSOCIATION_GUIDE,
+    ),
+    GroupableAssociationProduct(
+        label="TYXIA 2700",
+        category="Interrupteurs",
+        usage="interrupter",
+        usage_label="interrupteur",
+        tutorial_id="switch_tyxia2700",
+        group_picto="picto_interrupter",
+        endpoint_picto="picto_interrupter",
+        name_prefix="Interrupteur",
+        gateway_refs=MODERN_TYDOM_GATEWAY_REFS,
+        channels=(
+            GroupableAssociationChannel(
+                "Voie 1", "CG_DD_COMMON_CHANNEL1", "switch_tyxia2700_btn_a"
+            ),
+            GroupableAssociationChannel(
+                "Voie 2", "CG_DD_COMMON_CHANNEL2", "switch_tyxia2700_btn_b"
+            ),
+        ),
+        guide=(
+            "Parcours Home Assistant — ajout d'une voie de TYXIA 2700 :",
+            "1. Tournez le sélecteur sur le mode 1.",
+            "2. Sélectionnez {channel} avec le sélecteur.",
+            "3. Dans Home Assistant, appuyez sur « Lancer l'écoute de la passerelle ».",
+            "4. Appuyez brièvement sur le bouton : le voyant clignote une fois, puis replacez le sélecteur sur « Auto ».",
+            "5. Lorsque la confirmation est demandée, appuyez sur l'interrupteur relié à {channel_lower} pour valider l'association.",
+        ),
+    ),
+)
+
+GROUPABLE_ASSOCIATION_BY_LABEL = {
+    product.label: product for product in GROUPABLE_ASSOCIATION_PRODUCTS
+}
 
 OFFICIAL_ASSOCIATION_CATALOG: dict[str, tuple[AssociationChoice, ...]] = {
     "Volets": (
@@ -628,6 +829,7 @@ OFFICIAL_ASSOCIATION_CATALOG: dict[str, tuple[AssociationChoice, ...]] = {
         AssociationChoice("TYXAL PLUS WITH CLT 8000", "official:alarm_X3D_x3d_ppa"),
         AssociationChoice("TYXAL PLUS WITH TL 2000", "official:alarm_X3D_x3d_ppa"),
     ),
+    "Caméras": (AssociationChoice("Aucun profil local documenté", None),),
     "Consommation": (
         AssociationChoice("CALYBOX 1020 WT", "official:rt2012_noOutTemp_X3D_x3d_pped"),
         AssociationChoice("CALYBOX 2020 WT", "official:rt2012_X3D_x3d_pped"),
@@ -722,6 +924,13 @@ OFFICIAL_ASSOCIATION_CATALOG: dict[str, tuple[AssociationChoice, ...]] = {
         AssociationChoice("USAGE WEATHER", "official:weather_plt"),
     ),
 }
+
+# The generic recipes above remain useful as readable protocol documentation,
+# but the UI must use the complete, product-specific catalogue extracted from
+# the official app.  Keep both profile maps addressable because existing YAML
+# automations may still call a legacy profile id directly.
+DISCOVERY_PROFILES.update(OFFICIAL_DISCOVERY_PROFILES)
+ASSOCIATION_CATALOG = OFFICIAL_ASSOCIATION_CATALOG
 
 
 def get_association_choices(category: str) -> tuple[AssociationChoice, ...]:
@@ -968,17 +1177,24 @@ async def remove_product_association(device) -> None:
         raise
 
 
-def _next_interrupter_name(config: dict[str, object]) -> str:
-    """Return the next official-style name for a standalone wall switch."""
+def _next_groupable_product_name(
+    config: dict[str, object], product: GroupableAssociationProduct
+) -> str:
+    """Return the next official-style name for a multi-channel product."""
     used_names = {
         str(endpoint.get("name"))
         for endpoint in config.get("endpoints", [])
         if isinstance(endpoint, dict)
     }
+    used_names.update(
+        str(group.get("name"))
+        for group in config.get("groups", [])
+        if isinstance(group, dict)
+    )
     number = 1
-    while f"Interrupteur {number}" in used_names:
+    while f"{product.name_prefix} {number}" in used_names:
         number += 1
-    return f"Interrupteur {number}"
+    return f"{product.name_prefix} {number}"
 
 
 def _new_related_endpoints_group_id(config: dict[str, object]) -> int:
@@ -994,16 +1210,22 @@ def _new_related_endpoints_group_id(config: dict[str, object]) -> int:
             return group_id
 
 
-async def configure_tyxia_2600_interrupter(device, channel: str) -> str:
-    """Configure one discovered TYXIA 2600 channel as an app-visible product.
+async def configure_groupable_product(
+    device, product: GroupableAssociationProduct, channel: str
+) -> str:
+    """Configure one discovered channel as an app-visible product.
 
-    The official TYDOM catalogue marks the product as ``groupable``. It creates
-    a ``relatedendpoints`` group even if only one physical input is wired. A
-    later discovery can extend that group; Home Assistant never fabricates the
-    unused channel.
+    Every product in this family is marked ``groupable`` by the official
+    catalogue. It creates a ``relatedendpoints`` group even if only one channel
+    is in use. A later discovery extends that group; Home Assistant never
+    fabricates an unused channel.
     """
-    if channel not in {"Bouton A", "Bouton B"}:
-        raise ValueError(f"Unsupported TYXIA 2600 channel: {channel!r}")
+    channel_spec = next(
+        (candidate for candidate in product.channels if candidate.label == channel),
+        None,
+    )
+    if channel_spec is None:
+        raise ValueError(f"Unsupported {product.label} channel: {channel!r}")
 
     device_id = str(getattr(device, "_id", ""))
     endpoint_id = str(getattr(device, "_endpoint", ""))
@@ -1042,8 +1264,7 @@ async def configure_tyxia_2600_interrupter(device, channel: str) -> str:
         ),
         None,
     )
-    button = channel.removeprefix("Bouton ")
-    tutorial_id = f"switch_tyxia2600_btn_{button.lower()}"
+    tutorial_id = channel_spec.tutorial_id
 
     def is_member(group: dict, candidate_endpoint_id: str) -> bool:
         """Return whether a groups/file record contains this exact endpoint."""
@@ -1075,15 +1296,15 @@ async def configure_tyxia_2600_interrupter(device, channel: str) -> str:
     name = (
         str(configured_endpoint.get("name"))
         if configured_endpoint is not None and configured_endpoint.get("name")
-        else _next_interrupter_name(config)
+        else _next_groupable_product_name(config, product)
     )
     endpoint_config = {
         "id_device": int(device_id),
         "id_endpoint": int(endpoint_id),
-        "name": f"CG_DD_COMMON_BUTTON{button}",
-        "picto": "picto_interrupter",
-        "first_usage": "interrupter",
-        "last_usage": "interrupter",
+        "name": channel_spec.config_name,
+        "picto": product.endpoint_picto,
+        "first_usage": product.usage,
+        "last_usage": product.usage,
         "widget_behavior": {"tutorial_id": tutorial_id, "action": "TOGGLE"},
         "anticipation_start": False,
         "skill": "TYDOM_X3D",
@@ -1096,7 +1317,7 @@ async def configure_tyxia_2600_interrupter(device, channel: str) -> str:
             if isinstance(group, dict)
             and group.get("type") == "relatedendpoints"
             and isinstance(group.get("widget_behavior"), dict)
-            and group["widget_behavior"].get("tutorial_id") == "switch_tyxia2600"
+            and group["widget_behavior"].get("tutorial_id") == product.tutorial_id
             and any(
                 isinstance(membership, dict)
                 and str(membership.get("id")) == str(group.get("id"))
@@ -1130,12 +1351,12 @@ async def configure_tyxia_2600_interrupter(device, channel: str) -> str:
             {
                 "id": group_id,
                 "name": name,
-                "picto": "picto_interrupter",
-                "usage": "interrupter",
+                "picto": product.group_picto,
+                "usage": product.usage,
                 "type": "relatedendpoints",
                 "group_all": False,
                 "is_group_user": False,
-                "widget_behavior": {"tutorial_id": "switch_tyxia2600"},
+                "widget_behavior": {"tutorial_id": product.tutorial_id},
             }
         )
         updated_groups["groups"].append(
@@ -1158,7 +1379,9 @@ async def configure_tyxia_2600_interrupter(device, channel: str) -> str:
             None,
         )
         if membership is None:
-            raise ValueError("The TYXIA 2600 group has no /groups/file membership")
+            raise ValueError(
+                f"The {product.label} group has no /groups/file membership"
+            )
         device_membership = next(
             (
                 item
@@ -1168,7 +1391,7 @@ async def configure_tyxia_2600_interrupter(device, channel: str) -> str:
             None,
         )
         if device_membership is None:
-            raise ValueError("The TYXIA 2600 group cannot be extended safely")
+            raise ValueError(f"The {product.label} group cannot be extended safely")
         device_membership.setdefault("endpoints", []).append({"id": int(endpoint_id)})
         name = str(related_group.get("name") or name)
 
@@ -1187,6 +1410,13 @@ async def configure_tyxia_2600_interrupter(device, channel: str) -> str:
                 )
         raise
     return name
+
+
+async def configure_tyxia_2600_interrupter(device, channel: str) -> str:
+    """Compatibility wrapper for the original TYXIA 2600 helper."""
+    return await configure_groupable_product(
+        device, GROUPABLE_ASSOCIATION_BY_LABEL["TYXIA 2600"], channel
+    )
 
 
 class Hub:
@@ -1264,8 +1494,10 @@ class Hub:
         self._association_product = first_choice.label
         self._association_profile = first_choice.profile_id
         self._association_channel = "Bouton A"
-        self._pending_tyxia_2600_association: str | None = None
-        self._pending_tyxia_2600_known_device_ids: set[str] = set()
+        self._pending_groupable_association: (
+            tuple[GroupableAssociationProduct, str] | None
+        ) = None
+        self._pending_groupable_known_device_ids: set[str] = set()
         self._refresh_energy_buttons_created: set[str] = set()
         self._device_association_buttons_created: set[tuple[str, str]] = set()
         self._remote_battery_entities: dict[str, HARemoteBattery] = {}
@@ -1476,31 +1708,43 @@ class Hub:
     @property
     def association_product_labels(self) -> tuple[str, ...]:
         """Return product families for the selected category."""
-        return tuple(
-            choice.label
-            for choice in get_association_choices(self._association_category)
-        )
+        return tuple(choice.label for choice in self._association_choices())
 
     @property
     def association_product_label(self) -> str:
         """Return the label of the currently selected product family."""
-        return next(
-            choice.label
-            for choice in get_association_choices(self._association_category)
-            if choice.profile_id == self._association_profile
-        )
+        return self._association_product
 
     @property
     def association_product_supported(self) -> bool:
         """Whether the current choice has a documented local install profile."""
-        return self._association_profile is not None
+        product = GROUPABLE_ASSOCIATION_BY_LABEL.get(self._association_product)
+        return self._association_profile is not None and (
+            product is None or self._is_groupable_product_supported(product)
+        )
+
+    @property
+    def association_usage_labels(self) -> tuple[str, ...]:
+        """Return the official categories that support the selected product."""
+        return tuple(
+            category
+            for category in ASSOCIATION_CATALOG
+            if any(
+                choice.label == self._association_product
+                for choice in self._association_choices(category)
+            )
+        )
+
+    @property
+    def association_usage_label(self) -> str:
+        """Return the selected product's currently assigned application usage."""
+        return self._association_category
 
     @property
     def association_channel_labels(self) -> tuple[str, ...]:
         """Return independent physical channels for the selected product."""
-        if self._association_product == "TYXIA 2600":
-            return TYXIA_2600_ASSOCIATION_CHANNELS
-        return ()
+        product = self._selected_groupable_product()
+        return tuple(channel.label for channel in product.channels) if product else ()
 
     @property
     def association_channel_label(self) -> str | None:
@@ -1512,17 +1756,60 @@ class Hub:
     @property
     def association_instructions(self) -> tuple[str, ...]:
         """Return the app-derived procedure for the selected product/channel."""
-        if self._association_product != "TYXIA 2600":
+        product = self._selected_groupable_product()
+        if product is None:
             return ()
         channel = self._association_channel
-        button = channel.removeprefix("Bouton ")
+        button = channel.removeprefix("Bouton ").removeprefix("Touche ")
         return tuple(
             step.format(
                 channel=channel,
                 button=button,
+                channel_lower=channel.lower(),
             )
-            for step in TYXIA_2600_ASSOCIATION_GUIDE
+            for step in product.guide
         )
+
+    def _association_gateway_reference(self) -> str | None:
+        """Return the gateway main reference when it has been discovered."""
+        gateway = getattr(self, "devices", {}).get(getattr(self, "_id", ""))
+        reference = getattr(gateway, "mainReference", None)
+        return str(reference) if reference is not None else None
+
+    def _association_choices(
+        self, category: str | None = None
+    ) -> tuple[AssociationChoice, ...]:
+        """Return choices allowed by the current gateway and app catalogue."""
+        choices = get_association_choices(category or self._association_category)
+        reference = self._association_gateway_reference()
+        if reference is None:
+            return choices
+        return tuple(
+            choice
+            for choice in choices
+            if (
+                (product := GROUPABLE_ASSOCIATION_BY_LABEL.get(choice.label)) is None
+                or reference in product.gateway_refs
+            )
+        )
+
+    def _selected_groupable_product(self) -> GroupableAssociationProduct | None:
+        """Return the special product selected in the gateway controls."""
+        product = GROUPABLE_ASSOCIATION_BY_LABEL.get(self._association_product)
+        if (
+            product is None
+            or product.category != self._association_category
+            or not self._is_groupable_product_supported(product)
+        ):
+            return None
+        return product
+
+    def _is_groupable_product_supported(
+        self, product: GroupableAssociationProduct
+    ) -> bool:
+        """Prevent a stale special-product choice on an incompatible gateway."""
+        reference = self._association_gateway_reference()
+        return reference is None or reference in product.gateway_refs
 
     def register_association_control(self, entity) -> None:
         """Register a gateway control that needs selection-state updates."""
@@ -1541,7 +1828,11 @@ class Hub:
 
     def set_association_category(self, category: str) -> None:
         """Choose a usage category and its first valid product family."""
-        choices = get_association_choices(category)
+        choices = self._association_choices(category)
+        if not choices:
+            raise ValueError(
+                f"No product in {category!r} is supported by this TYDOM gateway"
+            )
         self._association_category = category
         choice = next(
             (choice for choice in choices if choice.label == self._association_product),
@@ -1554,8 +1845,9 @@ class Hub:
 
     def set_association_product(self, label: str) -> None:
         """Choose one product family from the current category."""
-        for choice in get_association_choices(self._association_category):
+        for choice in self._association_choices():
             if choice.label == label:
+                self._association_product = choice.label
                 self._association_profile = choice.profile_id
                 self._ensure_association_channel()
                 self._notify_association_controls()
@@ -1572,7 +1864,7 @@ class Hub:
             )
         choice = next(
             choice
-            for choice in get_association_choices(category)
+            for choice in self._association_choices(category)
             if choice.label == self._association_product
         )
         self._association_category = category
@@ -1600,24 +1892,30 @@ class Hub:
             raise ValueError(
                 "The selected category has no documented local TYDOM install profile"
             )
-        is_tyxia_2600 = (
-            self._association_product == "TYXIA 2600"
-            and self._association_category == "Interrupteurs"
+        configured_product = GROUPABLE_ASSOCIATION_BY_LABEL.get(
+            self._association_product
         )
-        if is_tyxia_2600:
+        if configured_product and not self._is_groupable_product_supported(
+            configured_product
+        ):
+            raise ValueError(
+                f"{configured_product.label} is not supported by this TYDOM gateway"
+            )
+        product = self._selected_groupable_product()
+        if product is not None:
             # Snapshot before the LAN request: the receive loop may discover
             # the product immediately after the gateway accepts it.
-            self._pending_tyxia_2600_known_device_ids = set(self.devices)
+            self._pending_groupable_known_device_ids = set(self.devices)
         try:
             payload = await start_product_association(self, self._association_profile)
         except Exception:
-            self._pending_tyxia_2600_known_device_ids.clear()
+            self._pending_groupable_known_device_ids.clear()
             raise
-        if is_tyxia_2600:
-            self._pending_tyxia_2600_association = self._association_channel
+        if product is not None:
+            self._pending_groupable_association = (product, self._association_channel)
         else:
-            self._pending_tyxia_2600_association = None
-            self._pending_tyxia_2600_known_device_ids.clear()
+            self._pending_groupable_association = None
+            self._pending_groupable_known_device_ids.clear()
         LOGGER.info(
             "Started gateway association for %s on config entry %s",
             payload,
@@ -2203,11 +2501,12 @@ class Hub:
             return
 
         buttons = []
-        finalization_key = (device.device_id, "finalize_tyxia_2600")
+        finalization_key = (device.device_id, "finalize_groupable_product")
+        pending_association = self._pending_groupable_association
         if (
             finalization_key not in self._device_association_buttons_created
-            and self._pending_tyxia_2600_association is not None
-            and device.device_id not in self._pending_tyxia_2600_known_device_ids
+            and pending_association is not None
+            and device.device_id not in self._pending_groupable_known_device_ids
             and (
                 (
                     isinstance(device, TydomRemoteControl)
@@ -2216,12 +2515,15 @@ class Hub:
                 or isinstance(device, TydomInterrupter)
             )
         ):
+            product, channel = pending_association
             buttons.append(
-                HATyxia2600FinalizeAssociationButton(
+                HAGroupableProductFinalizeAssociationButton(
                     device,
                     self._hass,
-                    self._pending_tyxia_2600_association,
-                    self._finalize_tyxia_2600_association,
+                    product.label,
+                    channel,
+                    product.usage_label,
+                    self._finalize_groupable_product_association,
                 )
             )
             self._device_association_buttons_created.add(finalization_key)
@@ -2250,16 +2552,20 @@ class Hub:
         if buttons:
             self.add_button_callback(buttons)
 
-    async def _finalize_tyxia_2600_association(
+    async def _finalize_groupable_product_association(
         self, device: TydomRemoteControl | TydomInterrupter, channel: str
     ) -> None:
-        """Persist the selected TYXIA 2600 button, then rebuild HA entities."""
-        if channel != self._pending_tyxia_2600_association:
-            raise ValueError("This TYXIA 2600 association is no longer pending")
-        name = await configure_tyxia_2600_interrupter(device, channel)
-        self._pending_tyxia_2600_association = None
-        self._pending_tyxia_2600_known_device_ids.clear()
-        LOGGER.info("Configured TYXIA 2600 %s as %s", channel, name)
+        """Persist the selected product channel, then rebuild HA entities."""
+        pending_association = self._pending_groupable_association
+        if pending_association is None:
+            raise ValueError("No multi-channel product association is pending")
+        product, expected_channel = pending_association
+        if channel != expected_channel:
+            raise ValueError(f"This {product.label} association is no longer pending")
+        name = await configure_groupable_product(device, product, channel)
+        self._pending_groupable_association = None
+        self._pending_groupable_known_device_ids.clear()
+        LOGGER.info("Configured %s %s as %s", product.label, channel, name)
         await self.reload_devices()
 
     async def ping(self) -> None:

@@ -6730,22 +6730,31 @@ class HADeviceRemovalButton(HADeviceAssociationButton):
         await self._removal_callback(self._device)
 
 
-class HATyxia2600FinalizeAssociationButton(HADeviceAssociationButton):
-    """Explicitly turn a discovered TYXIA 2600 button into an interrupter."""
+class HAGroupableProductFinalizeAssociationButton(HADeviceAssociationButton):
+    """Finalize the configuration of one discovered multi-channel product."""
 
     _attr_icon = "mdi:form-select"
 
-    def __init__(self, device: TydomDevice, hass, channel: str, callback) -> None:
+    def __init__(
+        self,
+        device: TydomDevice,
+        hass,
+        product_label: str,
+        channel: str,
+        usage_label: str,
+        callback,
+    ) -> None:
         """Initialise the safe post-discovery configuration action."""
         self.hass = hass
         self._device = device
+        self._product_label = product_label
         self._channel = channel
         self._callback = callback
-        self._attr_name = f"Configurer {channel} comme interrupteur"
-        self._attr_unique_id = f"{device.device_id}_button_finalize_tyxia_2600"
+        self._attr_name = f"Configurer {channel} comme {usage_label}"
+        self._attr_unique_id = f"{device.device_id}_button_finalize_{product_label.lower().replace(' ', '_')}"
 
     async def async_press(self) -> None:
-        """Persist the selected button with the official interrupter metadata."""
+        """Persist the selected channel with its official product metadata."""
         await self._callback(self._device, self._channel)
 
 
