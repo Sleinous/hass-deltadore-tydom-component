@@ -2,7 +2,7 @@
 
 from types import SimpleNamespace
 from unittest import IsolatedAsyncioTestCase
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 from custom_components.deltadore_tydom.hub import (
     ASSOCIATION_CATALOG,
@@ -378,6 +378,123 @@ class GatewayAssociationTests(IsolatedAsyncioTestCase):
                         },
                     ]
                 }
+            ],
+        )
+
+    async def test_second_tyxia_2600_button_creates_official_style_group(self) -> None:
+        """The second output turns the draft into an app-visible two-way group."""
+        config = {
+            "endpoints": [
+                {
+                    "id_device": 42,
+                    "id_endpoint": 84,
+                    "name": "Interrupteur 2",
+                    "first_usage": "interrupter",
+                    "last_usage": "interrupter",
+                    "widget_behavior": {
+                        "action": "TOGGLE",
+                        "tutorial_id": "switch_tyxia2600_btn_a",
+                    },
+                }
+            ],
+            "groups": [],
+        }
+        groups = {"groups": []}
+        calls: list[tuple[str, dict]] = []
+
+        async def get_config_file_document() -> dict:
+            return config
+
+        async def get_groups_file_document() -> dict:
+            return groups
+
+        async def post_config_file_document(document: dict) -> None:
+            calls.append(("config", document))
+
+        async def post_groups_file_document(document: dict) -> None:
+            calls.append(("groups", document))
+
+        device = SimpleNamespace(
+            _id="42",
+            _endpoint="85",
+            _tydom_client=SimpleNamespace(
+                get_config_file_document=get_config_file_document,
+                get_groups_file_document=get_groups_file_document,
+                post_config_file_document=post_config_file_document,
+                post_groups_file_document=post_groups_file_document,
+            ),
+        )
+
+        with patch(
+            "custom_components.deltadore_tydom.hub.secrets.randbelow",
+            return_value=11,
+        ):
+            name = await configure_tyxia_2600_interrupter(device, "Bouton B")
+
+        self.assertEqual(name, "Interrupteur 2")
+        self.assertEqual(
+            calls,
+            [
+                (
+                    "config",
+                    {
+                        "endpoints": [
+                            {
+                                "id_device": 42,
+                                "id_endpoint": 84,
+                                "name": "CG_DD_COMMON_BUTTONA",
+                                "first_usage": "interrupter",
+                                "last_usage": "interrupter",
+                                "widget_behavior": {
+                                    "action": "TOGGLE",
+                                    "tutorial_id": "switch_tyxia2600_btn_a",
+                                },
+                            },
+                            {
+                                "id_device": 42,
+                                "id_endpoint": 85,
+                                "name": "CG_DD_COMMON_BUTTONB",
+                                "picto": "default_device",
+                                "first_usage": "interrupter",
+                                "last_usage": "interrupter",
+                                "widget_behavior": {
+                                    "action": "TOGGLE",
+                                    "tutorial_id": "switch_tyxia2600_btn_b",
+                                },
+                                "anticipation_start": False,
+                                "skill": "TYDOM_X3D",
+                                "space_id": "",
+                            },
+                        ],
+                        "groups": [
+                            {
+                                "id": 12,
+                                "name": "Interrupteur 2",
+                                "usage": "interrupter",
+                                "type": "relatedendpoints",
+                                "widget_behavior": {
+                                    "tutorial_id": "switch_tyxia2600"
+                                },
+                            }
+                        ],
+                    },
+                ),
+                (
+                    "groups",
+                    {
+                        "groups": [
+                            {
+                                "id": 12,
+                                "devices": [
+                                    {
+                                        "id": 42,
+                                        "endpoints": [{"id": 84}, {"id": 85}],
+                                    }
+                                ],
+                            }
+                        ]
+                    },
+                ),
             ],
         )
 
