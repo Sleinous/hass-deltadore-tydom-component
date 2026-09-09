@@ -412,14 +412,12 @@ TYXIA_2600_ASSOCIATION_GUIDE = (
     "4. Maintenez B pendant 3 secondes, jusqu'à l'allumage du voyant vert, "
     "pour valider le mode sélectionné.",
     "5. Dans Home Assistant, appuyez sur « Lancer l'écoute de la passerelle » "
-    "et attendez que l'association soit en cours.",
-    "6. Pour confirmer, appuyez une fois sur le bouton physique {button}, "
-    "c'est-à-dire la voie {channel} choisie à l'étape 1.",
-    "\nParcours rapide affiché par TYDOM — association d'une voie :",
-    "Ce second parcours est différent. Après avoir choisi Bouton A ou Bouton B "
-    "dans TYDOM, l'application demande seulement de maintenir A pendant "
-    "3 secondes, jusqu'au clignotement rouge. Ne mélangez pas cette séquence "
-    "avec le parcours télécommande ci-dessus.",
+    "avant de poursuivre avec le TYXIA 2600.",
+    "6. Maintenez le bouton A physique pendant 3 secondes, jusqu'à ce que le "
+    "voyant rouge clignote.",
+    "7. Attendez pendant que l'association est en cours.",
+    "8. Lorsque la confirmation est demandée, appuyez sur le bouton de "
+    "l'interrupteur relié à la voie {button} ({channel}).",
 )
 
 OFFICIAL_ASSOCIATION_CATALOG: dict[str, tuple[AssociationChoice, ...]] = {

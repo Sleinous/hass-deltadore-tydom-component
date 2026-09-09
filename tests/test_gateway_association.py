@@ -129,10 +129,13 @@ class GatewayAssociationTests(IsolatedAsyncioTestCase):
             "bouton A physique pendant 6 secondes",
             tydom_hub.association_instructions[2],
         )
-        self.assertIn("bouton physique A", tydom_hub.association_instructions[6])
         self.assertIn(
-            "maintenir A pendant 3 secondes",
-            tydom_hub.association_instructions[-1],
+            "bouton A physique pendant 3 secondes",
+            tydom_hub.association_instructions[6],
+        )
+        self.assertIn(
+            "interrupteur relié à la voie A",
+            tydom_hub.association_instructions[8],
         )
 
         tydom_hub.set_association_channel("Bouton B")
@@ -145,7 +148,14 @@ class GatewayAssociationTests(IsolatedAsyncioTestCase):
             "bouton A physique pendant 6 secondes",
             tydom_hub.association_instructions[2],
         )
-        self.assertIn("bouton physique B", tydom_hub.association_instructions[6])
+        self.assertIn(
+            "bouton A physique pendant 3 secondes",
+            tydom_hub.association_instructions[6],
+        )
+        self.assertIn(
+            "interrupteur relié à la voie B",
+            tydom_hub.association_instructions[8],
+        )
 
     def test_official_products_hide_ambiguous_generic_recipes(self) -> None:
         """Known hardware must not be mixed with raw radio-profile choices."""
