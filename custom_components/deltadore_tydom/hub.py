@@ -1086,11 +1086,19 @@ async def configure_tyxia_2600_interrupter(device, channel: str) -> str:
         if isinstance(sibling_behavior, dict)
         else None
     )
-    if not isinstance(sibling_tutorial, str) or not sibling_tutorial.startswith(
+    if sibling_tutorial is None:
+        # The official app can create the initial standalone endpoint without
+        # its tutorial metadata. The selected second output unambiguously
+        # identifies the remaining first output.
+        sibling_button = "B" if button == "A" else "A"
+    elif not isinstance(sibling_tutorial, str) or not sibling_tutorial.startswith(
         "switch_tyxia2600_btn_"
     ):
         raise ValueError("The existing interrupter is not a TYXIA 2600 draft")
-    sibling_button = sibling_tutorial.removeprefix("switch_tyxia2600_btn_").upper()
+    else:
+        sibling_button = sibling_tutorial.removeprefix(
+            "switch_tyxia2600_btn_"
+        ).upper()
     if sibling_button not in {"A", "B"} or sibling_button == button:
         raise ValueError("Select the other TYXIA 2600 button to complete the pair")
 
@@ -1114,6 +1122,10 @@ async def configure_tyxia_2600_interrupter(device, channel: str) -> str:
             and str(configured_endpoint.get("id_endpoint")) == str(sibling_endpoint_id)
         ):
             configured_endpoint["name"] = f"CG_DD_COMMON_BUTTON{sibling_button}"
+            configured_endpoint["widget_behavior"] = {
+                "action": "TOGGLE",
+                "tutorial_id": f"switch_tyxia2600_btn_{sibling_button.lower()}",
+            }
     endpoint_config["name"] = f"CG_DD_COMMON_BUTTON{button}"
     updated_config["endpoints"].append(endpoint_config)
     updated_config["groups"].append(

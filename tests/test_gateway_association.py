@@ -391,10 +391,6 @@ class GatewayAssociationTests(IsolatedAsyncioTestCase):
                     "name": "Interrupteur 2",
                     "first_usage": "interrupter",
                     "last_usage": "interrupter",
-                    "widget_behavior": {
-                        "action": "TOGGLE",
-                        "tutorial_id": "switch_tyxia2600_btn_a",
-                    },
                 }
             ],
             "groups": [],
