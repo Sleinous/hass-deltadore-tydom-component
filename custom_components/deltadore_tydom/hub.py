@@ -405,6 +405,7 @@ TYXIA_2600_ASSOCIATION_CHANNELS = ("Bouton A", "Bouton B")
 TYXIA_2600_ASSOCIATION_GUIDE = (
     "Parcours Home Assistant — ajout du TYXIA 2600 comme télécommande :",
     "1. Dans Home Assistant, choisissez d'abord la voie à associer : {channel}.",
+    "   Le module peut n'avoir qu'une seule voie raccordée : n'ajoutez que les voies réellement utilisées.",
     "2. Maintenez le bouton {button} physique pendant 6 secondes. Le voyant rouge "
     "s'allume, s'éteint, puis reste fixe : relâchez alors le bouton.",
     "3. Le voyant vert clignote par séries. Appuyez brièvement sur A pour faire défiler "
@@ -814,9 +815,8 @@ async def remove_product_association(device) -> None:
     tydom_client = getattr(device, "_tydom_client", None)
     if device_id is None or tydom_client is None:
         raise ValueError("The selected entity does not expose a TYDOM device")
-    if (
-        getattr(device, "association_group_id", None) is None
-        and not isinstance(device, TydomInterrupter)
+    if getattr(device, "association_group_id", None) is None and not isinstance(
+        device, TydomInterrupter
     ):
         raise ValueError(
             "Safe complete removal is not yet available for this product. "
@@ -995,11 +995,12 @@ def _new_related_endpoints_group_id(config: dict[str, object]) -> int:
 
 
 async def configure_tyxia_2600_interrupter(device, channel: str) -> str:
-    """Add a discovered TYXIA 2600 output to an app-visible two-button group.
+    """Configure one discovered TYXIA 2600 channel as an app-visible product.
 
-    Radio discovery alone creates an unconfigured X3D product. The first
-    output becomes a draft; pairing the other output creates the configuration
-    and membership records used by the official app for a complete TYXIA 2600.
+    The official TYDOM catalogue marks the product as ``groupable``. It creates
+    a ``relatedendpoints`` group even if only one physical input is wired. A
+    later discovery can extend that group; Home Assistant never fabricates the
+    unused channel.
     """
     if channel not in {"Bouton A", "Bouton B"}:
         raise ValueError(f"Unsupported TYXIA 2600 channel: {channel!r}")
@@ -1016,129 +1017,160 @@ async def configure_tyxia_2600_interrupter(device, channel: str) -> str:
         or not endpoint_id
         or not callable(get_config)
         or not callable(post_config)
+        or not callable(get_groups)
+        or not callable(post_groups)
     ):
         raise ValueError("The selected endpoint cannot be configured safely")
 
     config = await get_config()
     endpoints = config.get("endpoints") if isinstance(config, dict) else None
-    if not isinstance(endpoints, list):
+    config_groups = config.get("groups") if isinstance(config, dict) else None
+    if not isinstance(endpoints, list) or not isinstance(config_groups, list):
         raise TypeError("The gateway returned a malformed /configs/file document")
-    if any(
-        isinstance(endpoint, dict)
-        and str(endpoint.get("id_device")) == device_id
-        and str(endpoint.get("id_endpoint")) == endpoint_id
-        for endpoint in endpoints
-    ):
-        raise ValueError("This TYXIA 2600 button is already configured")
+    groups = await get_groups()
+    group_memberships = groups.get("groups") if isinstance(groups, dict) else None
+    if not isinstance(group_memberships, list):
+        raise TypeError("The gateway returned malformed association documents")
 
+    configured_endpoint = next(
+        (
+            endpoint
+            for endpoint in endpoints
+            if isinstance(endpoint, dict)
+            and str(endpoint.get("id_device")) == device_id
+            and str(endpoint.get("id_endpoint")) == endpoint_id
+        ),
+        None,
+    )
     button = channel.removeprefix("Bouton ")
+    tutorial_id = f"switch_tyxia2600_btn_{button.lower()}"
+
+    def is_member(group: dict, candidate_endpoint_id: str) -> bool:
+        """Return whether a groups/file record contains this exact endpoint."""
+        return any(
+            isinstance(member, dict)
+            and str(member.get("id")) == device_id
+            and any(
+                isinstance(endpoint, dict)
+                and str(endpoint.get("id")) == candidate_endpoint_id
+                for endpoint in member.get("endpoints", [])
+            )
+            for member in group.get("devices", [])
+        )
+
+    existing_membership = next(
+        (
+            membership
+            for membership in group_memberships
+            if isinstance(membership, dict) and is_member(membership, endpoint_id)
+        ),
+        None,
+    )
+    if configured_endpoint is not None and existing_membership is not None:
+        behavior = configured_endpoint.get("widget_behavior")
+        if isinstance(behavior, dict) and behavior.get("tutorial_id") == tutorial_id:
+            raise ValueError("This TYXIA 2600 button is already configured")
+        raise ValueError("This endpoint already belongs to another configured product")
+
+    name = (
+        str(configured_endpoint.get("name"))
+        if configured_endpoint is not None and configured_endpoint.get("name")
+        else _next_interrupter_name(config)
+    )
     endpoint_config = {
         "id_device": int(device_id),
         "id_endpoint": int(endpoint_id),
-        "name": _next_interrupter_name(config),
-        "picto": "default_device",
+        "name": f"CG_DD_COMMON_BUTTON{button}",
+        "picto": "picto_interrupter",
         "first_usage": "interrupter",
         "last_usage": "interrupter",
-        "widget_behavior": {
-            "action": "TOGGLE",
-            "tutorial_id": f"switch_tyxia2600_btn_{button.lower()}",
-        },
+        "widget_behavior": {"tutorial_id": tutorial_id, "action": "TOGGLE"},
         "anticipation_start": False,
         "skill": "TYDOM_X3D",
-        "space_id": "",
     }
-    siblings = [
-        endpoint
-        for endpoint in endpoints
-        if isinstance(endpoint, dict)
-        and str(endpoint.get("id_device")) == device_id
-        and endpoint.get("last_usage") == "interrupter"
-    ]
-    if not siblings:
-        updated_config = copy.deepcopy(config)
-        updated_config["endpoints"].append(endpoint_config)
-        await post_config(updated_config)
-        return str(endpoint_config["name"])
 
-    if len(siblings) != 1 or not callable(get_groups) or not callable(post_groups):
-        raise ValueError(
-            "A complete TYXIA 2600 association requires one existing output "
-            "and writable /groups/file support"
-        )
-
-    sibling = siblings[0]
-    sibling_behavior = sibling.get("widget_behavior")
-    sibling_tutorial = (
-        sibling_behavior.get("tutorial_id")
-        if isinstance(sibling_behavior, dict)
-        else None
+    related_group = next(
+        (
+            group
+            for group in config_groups
+            if isinstance(group, dict)
+            and group.get("type") == "relatedendpoints"
+            and isinstance(group.get("widget_behavior"), dict)
+            and group["widget_behavior"].get("tutorial_id") == "switch_tyxia2600"
+            and any(
+                isinstance(membership, dict)
+                and str(membership.get("id")) == str(group.get("id"))
+                and any(
+                    isinstance(member, dict) and str(member.get("id")) == device_id
+                    for member in membership.get("devices", [])
+                )
+                for membership in group_memberships
+            )
+        ),
+        None,
     )
-    if sibling_tutorial is None:
-        # The official app can create the initial standalone endpoint without
-        # its tutorial metadata. The selected second output unambiguously
-        # identifies the remaining first output.
-        sibling_button = "B" if button == "A" else "A"
-    elif not isinstance(sibling_tutorial, str) or not sibling_tutorial.startswith(
-        "switch_tyxia2600_btn_"
-    ):
-        raise ValueError("The existing interrupter is not a TYXIA 2600 draft")
-    else:
-        sibling_button = sibling_tutorial.removeprefix(
-            "switch_tyxia2600_btn_"
-        ).upper()
-    if sibling_button not in {"A", "B"} or sibling_button == button:
-        raise ValueError("Select the other TYXIA 2600 button to complete the pair")
-
-    groups = await get_groups()
-    group_memberships = groups.get("groups") if isinstance(groups, dict) else None
-    config_groups = config.get("groups")
-    if not isinstance(group_memberships, list) or not isinstance(config_groups, list):
-        raise TypeError("The gateway returned malformed association documents")
-
-    name = str(sibling.get("name") or endpoint_config["name"])
-    sibling_endpoint_id = sibling.get("id_endpoint")
-    if sibling_endpoint_id is None:
-        raise ValueError("The TYXIA 2600 draft has no endpoint id")
-    group_id = _new_related_endpoints_group_id(config)
 
     updated_config = copy.deepcopy(config)
-    for configured_endpoint in updated_config["endpoints"]:
-        if (
-            isinstance(configured_endpoint, dict)
-            and str(configured_endpoint.get("id_device")) == device_id
-            and str(configured_endpoint.get("id_endpoint")) == str(sibling_endpoint_id)
-        ):
-            configured_endpoint["name"] = f"CG_DD_COMMON_BUTTON{sibling_button}"
-            configured_endpoint["widget_behavior"] = {
-                "action": "TOGGLE",
-                "tutorial_id": f"switch_tyxia2600_btn_{sibling_button.lower()}",
-            }
-    endpoint_config["name"] = f"CG_DD_COMMON_BUTTON{button}"
-    updated_config["endpoints"].append(endpoint_config)
-    updated_config["groups"].append(
-        {
-            "id": group_id,
-            "name": name,
-            "usage": "interrupter",
-            "type": "relatedendpoints",
-            "widget_behavior": {"tutorial_id": "switch_tyxia2600"},
-        }
-    )
     updated_groups = copy.deepcopy(groups)
-    updated_groups["groups"].append(
-        {
-            "id": group_id,
-            "devices": [
-                {
-                    "id": int(device_id),
-                    "endpoints": [
-                        {"id": int(sibling_endpoint_id)},
-                        {"id": int(endpoint_id)},
-                    ],
-                }
-            ],
-        }
-    )
+    if configured_endpoint is not None:
+        for endpoint in updated_config["endpoints"]:
+            if (
+                isinstance(endpoint, dict)
+                and str(endpoint.get("id_device")) == device_id
+                and str(endpoint.get("id_endpoint")) == endpoint_id
+            ):
+                endpoint.update(endpoint_config)
+                break
+    else:
+        updated_config["endpoints"].append(endpoint_config)
+
+    if related_group is None:
+        group_id = _new_related_endpoints_group_id(config)
+        updated_config["groups"].append(
+            {
+                "id": group_id,
+                "name": name,
+                "picto": "picto_interrupter",
+                "usage": "interrupter",
+                "type": "relatedendpoints",
+                "group_all": False,
+                "is_group_user": False,
+                "widget_behavior": {"tutorial_id": "switch_tyxia2600"},
+            }
+        )
+        updated_groups["groups"].append(
+            {
+                "id": group_id,
+                "devices": [
+                    {"id": int(device_id), "endpoints": [{"id": int(endpoint_id)}]}
+                ],
+                "areas": [],
+            }
+        )
+    else:
+        group_id = related_group.get("id")
+        membership = next(
+            (
+                item
+                for item in updated_groups["groups"]
+                if isinstance(item, dict) and str(item.get("id")) == str(group_id)
+            ),
+            None,
+        )
+        if membership is None:
+            raise ValueError("The TYXIA 2600 group has no /groups/file membership")
+        device_membership = next(
+            (
+                item
+                for item in membership.get("devices", [])
+                if isinstance(item, dict) and str(item.get("id")) == device_id
+            ),
+            None,
+        )
+        if device_membership is None:
+            raise ValueError("The TYXIA 2600 group cannot be extended safely")
+        device_membership.setdefault("endpoints", []).append({"id": int(endpoint_id)})
+        name = str(related_group.get("name") or name)
 
     config_updated = False
     try:
@@ -1150,7 +1182,9 @@ async def configure_tyxia_2600_interrupter(device, channel: str) -> str:
             try:
                 await post_config(config)
             except Exception:
-                LOGGER.exception("Unable to restore /configs/file after pairing failure")
+                LOGGER.exception(
+                    "Unable to restore /configs/file after pairing failure"
+                )
         raise
     return name
 
@@ -1231,6 +1265,7 @@ class Hub:
         self._association_profile = first_choice.profile_id
         self._association_channel = "Bouton A"
         self._pending_tyxia_2600_association: str | None = None
+        self._pending_tyxia_2600_known_device_ids: set[str] = set()
         self._refresh_energy_buttons_created: set[str] = set()
         self._device_association_buttons_created: set[tuple[str, str]] = set()
         self._remote_battery_entities: dict[str, HARemoteBattery] = {}
@@ -1565,14 +1600,24 @@ class Hub:
             raise ValueError(
                 "The selected category has no documented local TYDOM install profile"
             )
-        payload = await start_product_association(self, self._association_profile)
-        if (
+        is_tyxia_2600 = (
             self._association_product == "TYXIA 2600"
             and self._association_category == "Interrupteurs"
-        ):
+        )
+        if is_tyxia_2600:
+            # Snapshot before the LAN request: the receive loop may discover
+            # the product immediately after the gateway accepts it.
+            self._pending_tyxia_2600_known_device_ids = set(self.devices)
+        try:
+            payload = await start_product_association(self, self._association_profile)
+        except Exception:
+            self._pending_tyxia_2600_known_device_ids.clear()
+            raise
+        if is_tyxia_2600:
             self._pending_tyxia_2600_association = self._association_channel
         else:
             self._pending_tyxia_2600_association = None
+            self._pending_tyxia_2600_known_device_ids.clear()
         LOGGER.info(
             "Started gateway association for %s on config entry %s",
             payload,
@@ -2162,8 +2207,14 @@ class Hub:
         if (
             finalization_key not in self._device_association_buttons_created
             and self._pending_tyxia_2600_association is not None
-            and isinstance(device, TydomRemoteControl)
-            and device.device_name.startswith("X3D remote control ")
+            and device.device_id not in self._pending_tyxia_2600_known_device_ids
+            and (
+                (
+                    isinstance(device, TydomRemoteControl)
+                    and device.device_name.startswith("X3D remote control ")
+                )
+                or isinstance(device, TydomInterrupter)
+            )
         ):
             buttons.append(
                 HATyxia2600FinalizeAssociationButton(
@@ -2200,13 +2251,14 @@ class Hub:
             self.add_button_callback(buttons)
 
     async def _finalize_tyxia_2600_association(
-        self, device: TydomRemoteControl, channel: str
+        self, device: TydomRemoteControl | TydomInterrupter, channel: str
     ) -> None:
         """Persist the selected TYXIA 2600 button, then rebuild HA entities."""
         if channel != self._pending_tyxia_2600_association:
             raise ValueError("This TYXIA 2600 association is no longer pending")
         name = await configure_tyxia_2600_interrupter(device, channel)
         self._pending_tyxia_2600_association = None
+        self._pending_tyxia_2600_known_device_ids.clear()
         LOGGER.info("Configured TYXIA 2600 %s as %s", channel, name)
         await self.reload_devices()
 
