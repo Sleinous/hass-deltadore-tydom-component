@@ -283,43 +283,115 @@ ASSOCIATION_CATALOG: dict[str, tuple[AssociationChoice, ...]] = {
 # bundled with the official TYDOM application, but only the small, declarative
 # association facts are versioned here (never the APK itself).
 OFFICIAL_DISCOVERY_PROFILES: dict[str, DiscoveryProfile] = {
-    "official:aeraulic_ZIGBEE": DiscoveryProfile("aeraulic_ZIGBEE", "ZIGBEE", "", "aeraulic"),
-    "official:alarm_X3D_x2d_a": DiscoveryProfile("alarm_X3D_x2d_a", "X3D", "x2d_a", "alarm"),
-    "official:alarm_X3D_x3d_ppa": DiscoveryProfile("alarm_X3D_x3d_ppa", "X3D", "x3d_ppa", "alarm"),
-    "official:awning_X3D_x3d_rm": DiscoveryProfile("awning_X3D_x3d_rm", "X3D", "x3d_rm", "awning"),
-    "official:detector_X3D_direct": DiscoveryProfile("detector_X3D_direct", "X3D", "direct", "detector"),
-    "official:electric_ZIGBEE": DiscoveryProfile("electric_ZIGBEE", "ZIGBEE", "", "electric"),
-    "official:generic_X3D_x3d_pp": DiscoveryProfile("generic_X3D_x3d_pp", "X3D", "x3d_pp", "generic"),
-    "official:light_X3D_x3d_rm": DiscoveryProfile("light_X3D_x3d_rm", "X3D", "x3d_rm", "light"),
+    "official:aeraulic_ZIGBEE": DiscoveryProfile(
+        "aeraulic_ZIGBEE", "ZIGBEE", "", "aeraulic"
+    ),
+    "official:alarm_X3D_x2d_a": DiscoveryProfile(
+        "alarm_X3D_x2d_a", "X3D", "x2d_a", "alarm"
+    ),
+    "official:alarm_X3D_x3d_ppa": DiscoveryProfile(
+        "alarm_X3D_x3d_ppa", "X3D", "x3d_ppa", "alarm"
+    ),
+    "official:awning_X3D_x3d_rm": DiscoveryProfile(
+        "awning_X3D_x3d_rm", "X3D", "x3d_rm", "awning"
+    ),
+    "official:detector_X3D_direct": DiscoveryProfile(
+        "detector_X3D_direct", "X3D", "direct", "detector"
+    ),
+    "official:electric_ZIGBEE": DiscoveryProfile(
+        "electric_ZIGBEE", "ZIGBEE", "", "electric"
+    ),
+    "official:generic_X3D_x3d_pp": DiscoveryProfile(
+        "generic_X3D_x3d_pp", "X3D", "x3d_pp", "generic"
+    ),
+    "official:light_X3D_x3d_rm": DiscoveryProfile(
+        "light_X3D_x3d_rm", "X3D", "x3d_rm", "light"
+    ),
     "official:light_ZIGBEE": DiscoveryProfile("light_ZIGBEE", "ZIGBEE", "", "light"),
-    "official:meter_X3D_direct": DiscoveryProfile("meter_X3D_direct", "X3D", "direct", "meter"),
-    "official:multi_X3D_x3d_pped": DiscoveryProfile("multi_X3D_x3d_pped", "X3D", "x3d_pped", "multi"),
-    "official:opening_x3d_x3d_rm": DiscoveryProfile("opening_x3d_x3d_rm", "X3D", "x3d_rm", "opening"),
-    "official:pod_X3D_x3d_rm": DiscoveryProfile("pod_X3D_x3d_rm", "X3D", "x3d_rm", "pod"),
-    "official:remote_X3D_direct": DiscoveryProfile("remote_X3D_direct", "X3D", "direct", "remote"),
-    "official:rt2012_meas_X3D_x3d_pped": DiscoveryProfile("rt2012_meas_X3D_x3d_pped", "X3D", "x3d_pped", "rt2012_meas"),
-    "official:rt2012_noOutTemp_X3D_x3d_pped": DiscoveryProfile("rt2012_noOutTemp_X3D_x3d_pped", "X3D", "x3d_pped", "rt2012_noOutTemp"),
-    "official:rt2012_X3D_x3d_pped": DiscoveryProfile("rt2012_X3D_x3d_pped", "X3D", "x3d_pped", "rt2012"),
-    "official:sensor_X3D_direct": DiscoveryProfile("sensor_X3D_direct", "X3D", "direct", "sensor"),
-    "official:shThermic_X3D_x3d_rmloop": DiscoveryProfile("shThermic_X3D_x3d_rmloop", "X3D", "x3d_rmloop", "shThermic"),
-    "official:shutter_X3D_x3d_rm": DiscoveryProfile("shutter_X3D_x3d_rm", "X3D", "x3d_rm", "shutter"),
-    "official:shutter_X3D_x3d_rmlp": DiscoveryProfile("shutter_X3D_x3d_rmlp", "X3D", "x3d_rmlp", "shutter"),
-    "official:shutter_ZIGBEE": DiscoveryProfile("shutter_ZIGBEE", "ZIGBEE", "", "shutter"),
-    "official:shutter_ZIGBEE_PROFALUX": DiscoveryProfile("shutter_ZIGBEE_PROFALUX", "ZIGBEE", "PROFALUX", "shutter"),
-    "official:shutter_ZIGBEE_STELLA": DiscoveryProfile("shutter_ZIGBEE_STELLA", "ZIGBEE", "", "shutter"),
-    "official:shutterActivHome_X3D_x3d_rm": DiscoveryProfile("shutterActivHome_X3D_x3d_rm", "X3D", "x3d_rm", "shutterActivHome"),
-    "official:shutterBrushless_X3D_x3d_rm": DiscoveryProfile("shutterBrushless_X3D_x3d_rm", "X3D", "x3d_rm", "shutterBrushless"),
-    "official:shutterProjected_X3D_x3d_rm": DiscoveryProfile("shutterProjected_X3D_x3d_rm", "X3D", "x3d_rm", "shutterProjected"),
-    "official:temperature_X3D_direct": DiscoveryProfile("temperature_X3D_direct", "X3D", "direct", "temperature"),
-    "official:thermic_X3D_x2d_d": DiscoveryProfile("thermic_X3D_x2d_d", "X3D", "x2d_d", "thermic"),
-    "official:thermic_X3D_x3d_pps": DiscoveryProfile("thermic_X3D_x3d_pps", "X3D", "x3d_pps", "controller"),
-    "official:thermic_X3D_x3d_rm": DiscoveryProfile("thermic_X3D_x3d_rm", "X3D", "x3d_rm", "thermic"),
-    "official:thermic_X3D_x3d_rm_drive": DiscoveryProfile("thermic_X3D_x3d_rm_drive", "X3D", "x3d_rm", "boilerDrive"),
-    "official:thermic_X3D_x3d_rm_es": DiscoveryProfile("thermic_X3D_x3d_rm_es", "X3D", "x3d_rm", "thermicES"),
-    "official:thermic_ZIGBEE": DiscoveryProfile("thermic_ZIGBEE", "ZIGBEE", "", "thermic"),
-    "official:typassATL_X3D_direct": DiscoveryProfile("typassATL_X3D_direct", "X3D", "direct", "typassAtl"),
-    "official:typassSaunier_X3D_direct": DiscoveryProfile("typassSaunier_X3D_direct", "X3D", "direct", "typassSaunier"),
-    "official:weather_plt": DiscoveryProfile("weather_plt", "PltService", "", "weather"),
+    "official:meter_X3D_direct": DiscoveryProfile(
+        "meter_X3D_direct", "X3D", "direct", "meter"
+    ),
+    "official:multi_X3D_x3d_pped": DiscoveryProfile(
+        "multi_X3D_x3d_pped", "X3D", "x3d_pped", "multi"
+    ),
+    "official:opening_x3d_x3d_rm": DiscoveryProfile(
+        "opening_x3d_x3d_rm", "X3D", "x3d_rm", "opening"
+    ),
+    "official:pod_X3D_x3d_rm": DiscoveryProfile(
+        "pod_X3D_x3d_rm", "X3D", "x3d_rm", "pod"
+    ),
+    "official:remote_X3D_direct": DiscoveryProfile(
+        "remote_X3D_direct", "X3D", "direct", "remote"
+    ),
+    "official:rt2012_meas_X3D_x3d_pped": DiscoveryProfile(
+        "rt2012_meas_X3D_x3d_pped", "X3D", "x3d_pped", "rt2012_meas"
+    ),
+    "official:rt2012_noOutTemp_X3D_x3d_pped": DiscoveryProfile(
+        "rt2012_noOutTemp_X3D_x3d_pped", "X3D", "x3d_pped", "rt2012_noOutTemp"
+    ),
+    "official:rt2012_X3D_x3d_pped": DiscoveryProfile(
+        "rt2012_X3D_x3d_pped", "X3D", "x3d_pped", "rt2012"
+    ),
+    "official:sensor_X3D_direct": DiscoveryProfile(
+        "sensor_X3D_direct", "X3D", "direct", "sensor"
+    ),
+    "official:shThermic_X3D_x3d_rmloop": DiscoveryProfile(
+        "shThermic_X3D_x3d_rmloop", "X3D", "x3d_rmloop", "shThermic"
+    ),
+    "official:shutter_X3D_x3d_rm": DiscoveryProfile(
+        "shutter_X3D_x3d_rm", "X3D", "x3d_rm", "shutter"
+    ),
+    "official:shutter_X3D_x3d_rmlp": DiscoveryProfile(
+        "shutter_X3D_x3d_rmlp", "X3D", "x3d_rmlp", "shutter"
+    ),
+    "official:shutter_ZIGBEE": DiscoveryProfile(
+        "shutter_ZIGBEE", "ZIGBEE", "", "shutter"
+    ),
+    "official:shutter_ZIGBEE_PROFALUX": DiscoveryProfile(
+        "shutter_ZIGBEE_PROFALUX", "ZIGBEE", "PROFALUX", "shutter"
+    ),
+    "official:shutter_ZIGBEE_STELLA": DiscoveryProfile(
+        "shutter_ZIGBEE_STELLA", "ZIGBEE", "", "shutter"
+    ),
+    "official:shutterActivHome_X3D_x3d_rm": DiscoveryProfile(
+        "shutterActivHome_X3D_x3d_rm", "X3D", "x3d_rm", "shutterActivHome"
+    ),
+    "official:shutterBrushless_X3D_x3d_rm": DiscoveryProfile(
+        "shutterBrushless_X3D_x3d_rm", "X3D", "x3d_rm", "shutterBrushless"
+    ),
+    "official:shutterProjected_X3D_x3d_rm": DiscoveryProfile(
+        "shutterProjected_X3D_x3d_rm", "X3D", "x3d_rm", "shutterProjected"
+    ),
+    "official:temperature_X3D_direct": DiscoveryProfile(
+        "temperature_X3D_direct", "X3D", "direct", "temperature"
+    ),
+    "official:thermic_X3D_x2d_d": DiscoveryProfile(
+        "thermic_X3D_x2d_d", "X3D", "x2d_d", "thermic"
+    ),
+    "official:thermic_X3D_x3d_pps": DiscoveryProfile(
+        "thermic_X3D_x3d_pps", "X3D", "x3d_pps", "controller"
+    ),
+    "official:thermic_X3D_x3d_rm": DiscoveryProfile(
+        "thermic_X3D_x3d_rm", "X3D", "x3d_rm", "thermic"
+    ),
+    "official:thermic_X3D_x3d_rm_drive": DiscoveryProfile(
+        "thermic_X3D_x3d_rm_drive", "X3D", "x3d_rm", "boilerDrive"
+    ),
+    "official:thermic_X3D_x3d_rm_es": DiscoveryProfile(
+        "thermic_X3D_x3d_rm_es", "X3D", "x3d_rm", "thermicES"
+    ),
+    "official:thermic_ZIGBEE": DiscoveryProfile(
+        "thermic_ZIGBEE", "ZIGBEE", "", "thermic"
+    ),
+    "official:typassATL_X3D_direct": DiscoveryProfile(
+        "typassATL_X3D_direct", "X3D", "direct", "typassAtl"
+    ),
+    "official:typassSaunier_X3D_direct": DiscoveryProfile(
+        "typassSaunier_X3D_direct", "X3D", "direct", "typassSaunier"
+    ),
+    "official:weather_plt": DiscoveryProfile(
+        "weather_plt", "PltService", "", "weather"
+    ),
 }
 
 
@@ -369,9 +441,13 @@ OFFICIAL_ASSOCIATION_CATALOG: dict[str, tuple[AssociationChoice, ...]] = {
         AssociationChoice("VLO BUBENDORFF SHUTTER", "official:shutter_ZIGBEE"),
         AssociationChoice("VOLET BATTANT WELLCOM", "official:shutter_X3D_x3d_rm"),
         AssociationChoice("VOLET KLINE", "official:shutter_X3D_x3d_rm"),
-        AssociationChoice("VOLET PROJECTION WELLCOM", "official:shutterProjected_X3D_x3d_rm"),
+        AssociationChoice(
+            "VOLET PROJECTION WELLCOM", "official:shutterProjected_X3D_x3d_rm"
+        ),
         AssociationChoice("VOLET ROULANT WELLCOM", "official:shutter_X3D_x3d_rm"),
-        AssociationChoice("VOLET ROULANT WELLCOM SOLAR", "official:shutter_X3D_x3d_rmlp"),
+        AssociationChoice(
+            "VOLET ROULANT WELLCOM SOLAR", "official:shutter_X3D_x3d_rmlp"
+        ),
         AssociationChoice("VOLET ROULANT ZIGBEE", "official:shutter_ZIGBEE_PROFALUX"),
         AssociationChoice("VR BUBENDORFF SHUTTER", "official:shutter_ZIGBEE"),
     ),
@@ -436,7 +512,9 @@ OFFICIAL_ASSOCIATION_CATALOG: dict[str, tuple[AssociationChoice, ...]] = {
         AssociationChoice("TA 5555 ZIGBEE OTHERS", "official:electric_ZIGBEE"),
         AssociationChoice("THERMOSTAT ATLANTIC", "official:temperature_X3D_direct"),
         AssociationChoice("THERMOSTAT DELTA 8000", "official:temperature_X3D_direct"),
-        AssociationChoice("THERMOSTAT MULTIZONE KIT", "official:temperature_X3D_direct"),
+        AssociationChoice(
+            "THERMOSTAT MULTIZONE KIT", "official:temperature_X3D_direct"
+        ),
         AssociationChoice("TRV 1.0", "official:shThermic_X3D_x3d_rmloop"),
         AssociationChoice("TRV 2", "official:thermic_ZIGBEE"),
         AssociationChoice("TYBOX 1010 WT", "official:rt2012_noOutTemp_X3D_x3d_pped"),
@@ -457,13 +535,21 @@ OFFICIAL_ASSOCIATION_CATALOG: dict[str, tuple[AssociationChoice, ...]] = {
         AssociationChoice("TYBOX 5150 (RF 6200)", "official:thermic_X3D_x3d_rm"),
         AssociationChoice("TYBOX 5200 (RF 6050)", "official:thermic_X3D_x3d_rm"),
         AssociationChoice("TYBOX 5300 (RF 6050+)", "official:thermic_X3D_x3d_rm_es"),
-        AssociationChoice("TYBOX 5701 FP (RF 6700 FP)", "official:thermic_X3D_x3d_rm_es"),
-        AssociationChoice("TYBOX 5702 FP (2 x RF 6700 FP)", "official:thermic_X3D_x3d_rm_es"),
-        AssociationChoice("TYBOX HOME RF 210 (RF 7210)", "official:thermic_X3D_x3d_rm_es"),
+        AssociationChoice(
+            "TYBOX 5701 FP (RF 6700 FP)", "official:thermic_X3D_x3d_rm_es"
+        ),
+        AssociationChoice(
+            "TYBOX 5702 FP (2 x RF 6700 FP)", "official:thermic_X3D_x3d_rm_es"
+        ),
+        AssociationChoice(
+            "TYBOX HOME RF 210 (RF 7210)", "official:thermic_X3D_x3d_rm_es"
+        ),
         AssociationChoice("TYBOX RF 110 (RF 7110)", "official:thermic_X3D_x3d_rm_es"),
         AssociationChoice("TYBOX RF 130 (RF 7130)", "official:thermic_X3D_x3d_rm_es"),
         AssociationChoice("TYBOX RF 210 (RF 7210)", "official:thermic_X3D_x3d_rm_es"),
-        AssociationChoice("TYBOX RF 210 XL (RF 7210)", "official:thermic_X3D_x3d_rm_es"),
+        AssociationChoice(
+            "TYBOX RF 210 XL (RF 7210)", "official:thermic_X3D_x3d_rm_es"
+        ),
         AssociationChoice("TYPASS ATL", "official:thermic_X3D_x3d_rm"),
         AssociationChoice("TYPASS CHX", "official:thermic_X3D_x3d_rm"),
         AssociationChoice("TYPASS SD", "official:thermic_X3D_x3d_rm"),
@@ -478,7 +564,9 @@ OFFICIAL_ASSOCIATION_CATALOG: dict[str, tuple[AssociationChoice, ...]] = {
         AssociationChoice("NOVOFERM Novomatic 563", "official:light_X3D_x3d_rm"),
         AssociationChoice("NOVOFERM Novoport", "official:light_X3D_x3d_rm"),
         AssociationChoice("ROLLIA RADIO", "official:shutter_X3D_x3d_rm"),
-        AssociationChoice("SOMMER ROLLER DOOR CONTROL UNIT", "official:light_X3D_x3d_rm"),
+        AssociationChoice(
+            "SOMMER ROLLER DOOR CONTROL UNIT", "official:light_X3D_x3d_rm"
+        ),
         AssociationChoice("SOMMER S 90XX HORIZONTAL", "official:light_X3D_x3d_rm"),
         AssociationChoice("SOMMER S 90XX VERTICAL", "official:light_X3D_x3d_rm"),
         AssociationChoice("TUBAUTO Procom 10-3", "official:light_X3D_x3d_rm"),
@@ -492,7 +580,9 @@ OFFICIAL_ASSOCIATION_CATALOG: dict[str, tuple[AssociationChoice, ...]] = {
         AssociationChoice("TYXIA 5630", "official:shutter_X3D_x3d_rm"),
         AssociationChoice("TYXIA 5730", "official:shutter_X3D_x3d_rm"),
         AssociationChoice("TYXIA 6410", "official:light_X3D_x3d_rm"),
-        AssociationChoice("WELLCOM ROLLER DOOR CONTROL UNIT", "official:light_X3D_x3d_rm"),
+        AssociationChoice(
+            "WELLCOM ROLLER DOOR CONTROL UNIT", "official:light_X3D_x3d_rm"
+        ),
         AssociationChoice("WELLCOM S 90XX HORIZONTAL", "official:light_X3D_x3d_rm"),
         AssociationChoice("WELLCOM S 90XX VERTICAL", "official:light_X3D_x3d_rm"),
     ),
@@ -566,8 +656,12 @@ OFFICIAL_ASSOCIATION_CATALOG: dict[str, tuple[AssociationChoice, ...]] = {
     "Fenêtres": (
         AssociationChoice("CAPTEUR CPA", "official:detector_X3D_direct"),
         AssociationChoice("DETECTEUR OUVERTURE", "official:detector_X3D_direct"),
-        AssociationChoice("DETECTEUR VERROUILLAGE DVI SLIDING", "official:detector_X3D_direct"),
-        AssociationChoice("DETECTEUR VERROUILLAGE DVI SWING", "official:detector_X3D_direct"),
+        AssociationChoice(
+            "DETECTEUR VERROUILLAGE DVI SLIDING", "official:detector_X3D_direct"
+        ),
+        AssociationChoice(
+            "DETECTEUR VERROUILLAGE DVI SWING", "official:detector_X3D_direct"
+        ),
         AssociationChoice("I-SECURE (CPA)", "official:detector_X3D_direct"),
         AssociationChoice("USAGE DETECT WINDOW FPI", "official:opening_x3d_x3d_rm"),
     ),
@@ -785,8 +879,7 @@ async def remove_product_association(device) -> None:
         endpoint
         for endpoint in endpoints
         if not (
-            isinstance(endpoint, dict)
-            and str(endpoint.get("id_device")) == device_id
+            isinstance(endpoint, dict) and str(endpoint.get("id_device")) == device_id
         )
     ]
     updated_groups = copy.deepcopy(groups)
@@ -1774,9 +1867,7 @@ class Hub:
             )
         ):
             buttons.append(
-                HADeviceRemovalButton(
-                    device, self._hass, remove_product_association
-                )
+                HADeviceRemovalButton(device, self._hass, remove_product_association)
             )
             self._device_association_buttons_created.add(removal_key)
 

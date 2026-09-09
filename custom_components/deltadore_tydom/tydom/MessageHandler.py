@@ -140,9 +140,7 @@ def _is_tyxia_4910_other(uid: str) -> bool:
     return is_binary_tyxia_receiver_profile(device_metadata.get(uid))
 
 
-def _is_unconfigured_x3d_remote(
-    uid: str, endpoint: dict[str, Any]
-) -> bool:
+def _is_unconfigured_x3d_remote(uid: str, endpoint: dict[str, Any]) -> bool:
     """Return whether an endpoint is a radio remote without TYDOM config data.
 
     A freshly discovered X3D remote is not returned in ``/configs/file`` on
@@ -157,8 +155,7 @@ def _is_unconfigured_x3d_remote(
 
     data = endpoint.get("data", [])
     return any(
-        item.get("name") == "action"
-        and item.get("validity") == "upToDate"
+        item.get("name") == "action" and item.get("validity") == "upToDate"
         for item in data
         if isinstance(item, dict)
     )
@@ -707,7 +704,9 @@ class MessageHandler:
                         parsed = json.loads(parsed_message.body or b"null")
                     self._cdata_replies.insert(
                         0,
-                        Reply(transaction_id=transaction_id, events=[parsed], done=True),
+                        Reply(
+                            transaction_id=transaction_id, events=[parsed], done=True
+                        ),
                     )
                     if len(self._cdata_replies) > _MAX_REPLIES_SIZE:
                         self._cdata_replies.pop()

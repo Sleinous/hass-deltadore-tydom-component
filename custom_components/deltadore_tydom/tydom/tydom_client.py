@@ -1004,9 +1004,7 @@ class TydomClient:
         await self.get_reply_to_request("DELETE", f"/groups/{safe_group_id}")
 
     @staticmethod
-    def _file_reply_document(
-        reply: list[dict] | None, path: str
-    ) -> dict[str, object]:
+    def _file_reply_document(reply: list[dict] | None, path: str) -> dict[str, object]:
         """Return the single JSON document returned by a TYDOM file endpoint."""
         if not reply or not isinstance(reply[0], dict):
             raise TydomClientApiClientCommunicationError(
