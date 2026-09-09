@@ -68,6 +68,7 @@ from .ha_entities import (
     HAButton,
     HADeviceAssociationButton,
     HADeviceRemovalButton,
+    HATyxia2600FinalizeAssociationButton,
     HAGatewayAssociationCategorySelect,
     HAGatewayAssociationChannelSelect,
     HAGatewayAssociationGuideButton,
@@ -825,9 +826,10 @@ async def remove_product_association(device) -> None:
     tydom_client = getattr(device, "_tydom_client", None)
     if device_id is None or tydom_client is None:
         raise ValueError("The selected entity does not expose a TYDOM device")
-
-    association_group_id = getattr(device, "association_group_id", None)
-    if association_group_id is None:
+    if (
+        getattr(device, "association_group_id", None) is None
+        and not isinstance(device, TydomInterrupter)
+    ):
         raise ValueError(
             "Safe complete removal is not yet available for this product. "
             "It may belong to user groups, scenarios or moments."
@@ -843,6 +845,57 @@ async def remove_product_association(device) -> None:
         for value in (config_groups, group_memberships, endpoints)
     ):
         raise ValueError("The gateway returned an incomplete configuration")
+
+    association_group_id = getattr(device, "association_group_id", None)
+    if association_group_id is None:
+        # The official app can configure a single TYXIA 2600 button as an
+        # interrupter without a related-endpoints group. It is safe to remove
+        # only when it is the sole configured endpoint and has no membership.
+        if not isinstance(device, TydomInterrupter):
+            raise ValueError(
+                "Safe complete removal is not yet available for this product. "
+                "It may belong to user groups, scenarios or moments."
+            )
+        device_id = str(device_id)
+        endpoint_id = str(getattr(device, "_endpoint", ""))
+        matching_endpoints = [
+            endpoint
+            for endpoint in endpoints
+            if isinstance(endpoint, dict)
+            and str(endpoint.get("id_device")) == device_id
+        ]
+        referenced_by_group = any(
+            isinstance(group, dict)
+            and any(
+                isinstance(member, dict) and str(member.get("id")) == device_id
+                for member in group.get("devices", [])
+            )
+            for group in group_memberships
+        )
+        if (
+            len(matching_endpoints) != 1
+            or str(matching_endpoints[0].get("id_endpoint")) != endpoint_id
+            or referenced_by_group
+        ):
+            raise ValueError(
+                "Safe complete removal is only available for an isolated "
+                "TYXIA 2600 interrupter button"
+            )
+
+        updated_config = copy.deepcopy(config)
+        updated_config["endpoints"] = [
+            endpoint for endpoint in endpoints if endpoint is not matching_endpoints[0]
+        ]
+        await tydom_client.post_config_file_document(updated_config)
+        try:
+            await tydom_client.delete_device(device_id)
+        except Exception:
+            try:
+                await tydom_client.post_config_file_document(config)
+            except Exception:
+                LOGGER.exception("Unable to restore /configs/file after failed removal")
+            raise
+        return
 
     group_id = str(association_group_id)
     config_group = next(
@@ -927,6 +980,73 @@ async def remove_product_association(device) -> None:
         raise
 
 
+def _next_interrupter_name(config: dict[str, object]) -> str:
+    """Return the next official-style name for a standalone wall switch."""
+    used_names = {
+        str(endpoint.get("name"))
+        for endpoint in config.get("endpoints", [])
+        if isinstance(endpoint, dict)
+    }
+    number = 1
+    while f"Interrupteur {number}" in used_names:
+        number += 1
+    return f"Interrupteur {number}"
+
+
+async def configure_tyxia_2600_interrupter(device, channel: str) -> str:
+    """Persist one discovered TYXIA 2600 button as an interrupter.
+
+    Radio discovery alone creates an unconfigured X3D product. The official
+    app then adds a single endpoint configuration with the ``interrupter``
+    usage; mirroring that record avoids leaving it under *Non géré*.
+    """
+    if channel not in {"Bouton A", "Bouton B"}:
+        raise ValueError(f"Unsupported TYXIA 2600 channel: {channel!r}")
+
+    device_id = str(getattr(device, "_id", ""))
+    endpoint_id = str(getattr(device, "_endpoint", ""))
+    tydom_client = getattr(device, "_tydom_client", None)
+    get_config = getattr(tydom_client, "get_config_file_document", None)
+    post_config = getattr(tydom_client, "post_config_file_document", None)
+    if not device_id or not endpoint_id or not callable(get_config) or not callable(post_config):
+        raise ValueError("The selected endpoint cannot be configured safely")
+
+    config = await get_config()
+    endpoints = config.get("endpoints") if isinstance(config, dict) else None
+    if not isinstance(endpoints, list):
+        raise TypeError("The gateway returned a malformed /configs/file document")
+    if any(
+        isinstance(endpoint, dict)
+        and str(endpoint.get("id_device")) == device_id
+        and str(endpoint.get("id_endpoint")) == endpoint_id
+        for endpoint in endpoints
+    ):
+        raise ValueError("This TYXIA 2600 button is already configured")
+
+    button = channel.removeprefix("Bouton ")
+    name = _next_interrupter_name(config)
+    updated_config = copy.deepcopy(config)
+    updated_config["endpoints"].append(
+        {
+            "id_device": int(device_id),
+            "id_endpoint": int(endpoint_id),
+            "name": name,
+            "picto": "default_device",
+            "first_usage": "interrupter",
+            "last_usage": "interrupter",
+            "widget_behavior": {
+                "action": "TOGGLE",
+                "tutorial_id": f"switch_tyxia2600_btn_{button.lower()}",
+            },
+            "anticipation_start": False,
+            "skill": "TYDOM_X3D",
+            "space_id": "",
+        }
+    )
+    await post_config(updated_config)
+    return name
+
+
 class Hub:
     """Hub for Delta Dore Tydom."""
 
@@ -1002,6 +1122,7 @@ class Hub:
         self._association_product = first_choice.label
         self._association_profile = first_choice.profile_id
         self._association_channel = "Bouton A"
+        self._pending_tyxia_2600_association: str | None = None
         self._refresh_energy_buttons_created: set[str] = set()
         self._device_association_buttons_created: set[tuple[str, str]] = set()
         self._remote_battery_entities: dict[str, HARemoteBattery] = {}
@@ -1347,6 +1468,13 @@ class Hub:
                 "The selected category has no documented local TYDOM install profile"
             )
         payload = await start_product_association(self, self._association_profile)
+        if (
+            self._association_product == "TYXIA 2600"
+            and self._association_category == "Interrupteurs"
+        ):
+            self._pending_tyxia_2600_association = self._association_channel
+        else:
+            self._pending_tyxia_2600_association = None
         LOGGER.info(
             "Started gateway association for %s on config entry %s",
             payload,
@@ -1932,6 +2060,22 @@ class Hub:
             return
 
         buttons = []
+        finalization_key = (device.device_id, "finalize_tyxia_2600")
+        if (
+            finalization_key not in self._device_association_buttons_created
+            and self._pending_tyxia_2600_association is not None
+            and isinstance(device, TydomRemoteControl)
+            and device.device_name.startswith("X3D remote control ")
+        ):
+            buttons.append(
+                HATyxia2600FinalizeAssociationButton(
+                    device,
+                    self._hass,
+                    self._pending_tyxia_2600_association,
+                    self._finalize_tyxia_2600_association,
+                )
+            )
+            self._device_association_buttons_created.add(finalization_key)
         removal_key = (device.device_id, "remove_association")
         if (
             removal_key not in self._device_association_buttons_created
@@ -1956,6 +2100,17 @@ class Hub:
 
         if buttons:
             self.add_button_callback(buttons)
+
+    async def _finalize_tyxia_2600_association(
+        self, device: TydomRemoteControl, channel: str
+    ) -> None:
+        """Persist the selected TYXIA 2600 button, then rebuild HA entities."""
+        if channel != self._pending_tyxia_2600_association:
+            raise ValueError("This TYXIA 2600 association is no longer pending")
+        name = await configure_tyxia_2600_interrupter(device, channel)
+        self._pending_tyxia_2600_association = None
+        LOGGER.info("Configured TYXIA 2600 %s as %s", channel, name)
+        await self.reload_devices()
 
     async def ping(self) -> None:
         """Periodically send pings."""

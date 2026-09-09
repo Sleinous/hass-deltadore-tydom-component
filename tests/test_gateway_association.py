@@ -7,6 +7,7 @@ from unittest.mock import MagicMock
 from custom_components.deltadore_tydom.hub import (
     ASSOCIATION_CATALOG,
     OFFICIAL_DISCOVERY_PROFILES,
+    configure_tyxia_2600_interrupter,
     get_association_choices,
     get_install_payload,
     remove_product_association,
@@ -330,6 +331,105 @@ class GatewayAssociationTests(IsolatedAsyncioTestCase):
                 ("device", "42"),
             ],
         )
+
+    async def test_tyxia_2600_button_is_finalized_as_an_interrupter(self) -> None:
+        """Finalization adds the same isolated endpoint metadata as TYDOM."""
+        config = {"endpoints": [{"id_device": 12, "name": "Interrupteur 1"}]}
+        posted: list[dict] = []
+
+        async def get_config_file_document() -> dict:
+            return config
+
+        async def post_config_file_document(document: dict) -> None:
+            posted.append(document)
+
+        device = SimpleNamespace(
+            _id="42",
+            _endpoint="84",
+            _tydom_client=SimpleNamespace(
+                get_config_file_document=get_config_file_document,
+                post_config_file_document=post_config_file_document,
+            ),
+        )
+
+        name = await configure_tyxia_2600_interrupter(device, "Bouton B")
+
+        self.assertEqual(name, "Interrupteur 2")
+        self.assertEqual(
+            posted,
+            [
+                {
+                    "endpoints": [
+                        {"id_device": 12, "name": "Interrupteur 1"},
+                        {
+                            "id_device": 42,
+                            "id_endpoint": 84,
+                            "name": "Interrupteur 2",
+                            "picto": "default_device",
+                            "first_usage": "interrupter",
+                            "last_usage": "interrupter",
+                            "widget_behavior": {
+                                "action": "TOGGLE",
+                                "tutorial_id": "switch_tyxia2600_btn_b",
+                            },
+                            "anticipation_start": False,
+                            "skill": "TYDOM_X3D",
+                            "space_id": "",
+                        },
+                    ]
+                }
+            ],
+        )
+
+    async def test_isolated_tyxia_2600_button_removal_updates_config_then_radio(
+        self,
+    ) -> None:
+        """A one-button official app configuration can be removed safely."""
+        calls: list[tuple[str, object]] = []
+        config = {
+            "endpoints": [
+                {
+                    "id_device": 42,
+                    "id_endpoint": 84,
+                    "last_usage": "interrupter",
+                }
+            ],
+            "groups": [],
+        }
+        groups = {"groups": []}
+
+        async def get_config_file_document() -> dict:
+            return config
+
+        async def get_groups_file_document() -> dict:
+            return groups
+
+        async def post_config_file_document(document: dict) -> None:
+            calls.append(("config", document))
+
+        async def delete_device(device_id: str) -> None:
+            calls.append(("device", device_id))
+
+        device = TydomInterrupter(
+            SimpleNamespace(
+                get_config_file_document=get_config_file_document,
+                get_groups_file_document=get_groups_file_document,
+                post_config_file_document=post_config_file_document,
+                delete_device=delete_device,
+            ),
+            "84_42",
+            "42",
+            "Button A",
+            "interrupter",
+            "84",
+            None,
+            None,
+            {"button": "A"},
+        )
+
+        await remove_product_association(device)
+
+        self.assertEqual(calls, [("config", {"endpoints": [], "groups": []}), ("device", "42")])
 
     async def test_device_removal_button_is_enabled_and_removes_its_product(
         self,
