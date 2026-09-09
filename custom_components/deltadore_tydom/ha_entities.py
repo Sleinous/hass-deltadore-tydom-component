@@ -6890,14 +6890,9 @@ class HAGatewayAssociationGuideButton(_GatewayAssociationEntity, ButtonEntity):
         channel = self._hub.association_channel_label
         title = f"{self._hub.association_product_label} — association {channel}"
         steps = "\n\n".join(self._hub.association_instructions)
-        message = (
-            f"{steps}\n\n"
-            "Une fois l'étape 3 terminée, revenez ici, lancez l'écoute de la "
-            "passerelle, puis effectuez immédiatement l'étape 5."
-        )
         persistent_notification.async_create(
             self.hass,
-            message,
+            steps,
             title=title,
             notification_id=f"{DOMAIN}_{self._hub.hub_id}_association_guide",
         )

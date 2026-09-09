@@ -323,28 +323,29 @@ OFFICIAL_DISCOVERY_PROFILES: dict[str, DiscoveryProfile] = {
 
 
 # The TYXIA 2600 is not a generic radio product: its two physical buttons are
-# associated independently. The official app starts gateway discovery only
-# after the user has selected the radio mode and confirmed it with button B.
-TYXIA_2600_ASSOCIATION_GUIDES: dict[str, tuple[str, ...]] = {
-    "Bouton A": (
-        "1. Maintenez A pendant 6 secondes, puis relâchez lorsque le voyant rouge reste fixe.",
-        "2. Attendez le clignotement vert par série de 1. Appuyez sur A pour "
-        "changer le nombre de flashs si nécessaire.",
-        "3. Maintenez B pendant 3 secondes, jusqu'à l'allumage du voyant vert.",
-        "4. Appuyez ici pour lancer l'écoute de la passerelle.",
-        "5. Maintenez A pendant 3 secondes jusqu'au clignotement rouge, puis "
-        "appuyez sur A pour confirmer.",
-    ),
-    "Bouton B": (
-        "1. Maintenez B pendant 6 secondes, puis relâchez lorsque le voyant rouge reste fixe.",
-        "2. Attendez le clignotement vert par série de 1. Appuyez sur A pour "
-        "changer le nombre de flashs si nécessaire.",
-        "3. Maintenez B pendant 3 secondes, jusqu'à l'allumage du voyant vert.",
-        "4. Appuyez ici pour lancer l'écoute de la passerelle.",
-        "5. Maintenez B pendant 3 secondes jusqu'au clignotement rouge, puis "
-        "appuyez sur B pour confirmer.",
-    ),
-}
+# associated independently. The documented "remote control" process starts
+# with button A, irrespective of the selected channel, then confirms that
+# selected channel only after the gateway has entered association mode.
+TYXIA_2600_ASSOCIATION_CHANNELS = ("Bouton A", "Bouton B")
+TYXIA_2600_ASSOCIATION_GUIDE = (
+    "Parcours Home Assistant — ajout du TYXIA 2600 comme télécommande :",
+    "1. Dans Home Assistant, choisissez d'abord la voie à associer : {channel}.",
+    "2. Maintenez le bouton A physique pendant 6 secondes. Le voyant rouge "
+    "s'allume, s'éteint, puis reste fixe : relâchez alors le bouton.",
+    "3. Le voyant vert clignote par séries. Appuyez sur A pour faire défiler "
+    "les modes, puis conservez le mode correspondant à l'association voulue.",
+    "4. Maintenez B pendant 3 secondes, jusqu'à l'allumage du voyant vert, "
+    "pour valider le mode sélectionné.",
+    "5. Dans Home Assistant, appuyez sur « Lancer l'écoute de la passerelle » "
+    "et attendez que l'association soit en cours.",
+    "6. Pour confirmer, appuyez une fois sur le bouton physique {button}, "
+    "c'est-à-dire la voie {channel} choisie à l'étape 1.",
+    "\nParcours rapide affiché par TYDOM — association d'une voie :",
+    "Ce second parcours est différent. Après avoir choisi Bouton A ou Bouton B "
+    "dans TYDOM, l'application demande seulement de maintenir A pendant "
+    "3 secondes, jusqu'au clignotement rouge. Ne mélangez pas cette séquence "
+    "avec le parcours télécommande ci-dessus.",
+)
 
 OFFICIAL_ASSOCIATION_CATALOG: dict[str, tuple[AssociationChoice, ...]] = {
     "Volets": (
@@ -1128,7 +1129,7 @@ class Hub:
     def association_channel_labels(self) -> tuple[str, ...]:
         """Return independent physical channels for the selected product."""
         if self._association_product == "TYXIA 2600":
-            return tuple(TYXIA_2600_ASSOCIATION_GUIDES)
+            return TYXIA_2600_ASSOCIATION_CHANNELS
         return ()
 
     @property
@@ -1143,7 +1144,11 @@ class Hub:
         """Return the app-derived procedure for the selected product/channel."""
         if self._association_product != "TYXIA 2600":
             return ()
-        return TYXIA_2600_ASSOCIATION_GUIDES[self._association_channel]
+        channel = self._association_channel
+        return tuple(
+            step.format(channel=channel, button=channel.removeprefix("Bouton "))
+            for step in TYXIA_2600_ASSOCIATION_GUIDE
+        )
 
     def register_association_control(self, entity) -> None:
         """Register a gateway control that needs selection-state updates."""
