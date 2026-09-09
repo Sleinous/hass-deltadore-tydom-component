@@ -220,6 +220,22 @@ def is_binary_attribute(
     )
 
 
+def _get_hub_for_tydom_device(hass: Any, device: Any):
+    """Return the hub that owns one device, even with several gateways."""
+    if hass is None:
+        return None
+    hubs = getattr(hass, "data", {}).get(DOMAIN, {})
+    device_client = getattr(device, "_tydom_client", None)
+    for hub in hubs.values():
+        if getattr(hub, "_tydom_client", None) is device_client:
+            return hub
+        if any(
+            candidate is device for candidate in getattr(hub, "devices", {}).values()
+        ):
+            return hub
+    return None
+
+
 class HAEntity:
     """Generic abstract HA entity."""
 
@@ -233,17 +249,8 @@ class HAEntity:
     hass: Any = None
 
     def _get_hub(self):
-        """Get the hub instance from hass data."""
-        if self.hass is None:
-            return None
-        if DOMAIN not in self.hass.data:
-            return None
-        # Get the first hub entry (assuming single hub per instance)
-        hubs = self.hass.data[DOMAIN]
-        if not hubs:
-            return None
-        # Return the first hub (entry_id is the key)
-        return next(iter(hubs.values()))
+        """Return the hub that owns this entity's TYDOM device."""
+        return _get_hub_for_tydom_device(self.hass, self._device)
 
     def _get_tydom_gateway_device_id(self) -> str | None:
         """Get the Tydom gateway device_id to use as via_device_id."""
@@ -263,7 +270,7 @@ class HAEntity:
         return None
 
     def _enrich_device_info(self, info: DeviceInfo) -> DeviceInfo:
-        """Enrich device info with via_device link to gateway.
+        """Enrich device info with a parent link to the gateway.
 
         Note: If area information becomes available from Tydom API
         (via /areas/data endpoint), we could add 'suggested_area' to DeviceInfo
@@ -274,7 +281,10 @@ class HAEntity:
         gateway_device_id = self._get_tydom_gateway_device_id()
         if gateway_device_id is not None and self._device is not None:
             if gateway_device_id != self._device.device_id:
-                info["via_device"] = (DOMAIN, gateway_device_id)
+                if gateway_registry_device_id := _get_tydom_gateway_registry_device_id(
+                    self.hass, self._device
+                ):
+                    info["via_device_id"] = gateway_registry_device_id
         return info
 
     async def async_added_to_hass(self) -> None:
@@ -465,6 +475,51 @@ class HAEntity:
         return info
 
 
+def _get_tydom_gateway_registry_device_id(hass: Any, device: Any) -> str | None:
+    """Resolve the owning gateway's Home Assistant device-registry ID.
+
+    Device identifiers are scoped to a config entry in Home Assistant 2026.9.
+    Resolving the parent through the owning hub therefore avoids linking a child
+    from one TYDOM gateway to an identically identified gateway from another
+    config entry.
+    """
+    hub = _get_hub_for_tydom_device(hass, device)
+    entry = getattr(hub, "_entry", None)
+    if hub is None or entry is None:
+        return None
+
+    gateway_device_id = next(
+        (
+            gateway.device_id
+            for gateway in getattr(hub, "devices", {}).values()
+            if isinstance(gateway, Tydom)
+        ),
+        None,
+    )
+    if gateway_device_id is None:
+        gateway_device_id = next(
+            (
+                ha_device._device.device_id
+                for ha_device in getattr(hub, "ha_devices", {}).values()
+                if isinstance(ha_device, HATydom)
+            ),
+            None,
+        )
+    if gateway_device_id is None:
+        return None
+
+    try:
+        return dr.async_get_device_id_by_identifier(
+            hass,
+            (DOMAIN, gateway_device_id),
+            config_entry_id=entry.entry_id,
+        )
+    except ValueError:
+        # The gateway entity has not been registered yet. Omitting the optional
+        # parent link is safer than creating a link to another config entry.
+        return None
+
+
 class GenericSensor(SensorEntity):
     """Representation of a generic sensor."""
 
@@ -536,15 +591,8 @@ class GenericSensor(SensorEntity):
             self._attr_entity_category = EntityCategory.DIAGNOSTIC
 
     def _get_hub(self):
-        """Get the hub instance from hass data."""
-        if not hasattr(self, "hass") or self.hass is None:
-            return None
-        if DOMAIN not in self.hass.data:
-            return None
-        hubs = self.hass.data[DOMAIN]
-        if not hubs:
-            return None
-        return next(iter(hubs.values()))
+        """Return the hub that owns this entity's TYDOM device."""
+        return _get_hub_for_tydom_device(self.hass, self._device)
 
     def _get_tydom_gateway_device_id(self) -> str | None:
         """Get the Tydom gateway device_id to use as via_device_id."""
@@ -701,10 +749,13 @@ class GenericSensor(SensorEntity):
         if "sw_version" in device_info_dict and not grouped_with_parent:
             info["sw_version"] = device_info_dict["sw_version"]
 
-        # Link device to Tydom gateway via via_device
+        # Link device to the owning Tydom gateway.
         gateway_device_id = self._get_tydom_gateway_device_id()
         if gateway_device_id is not None and gateway_device_id != registry_device_id:
-            info["via_device"] = (DOMAIN, gateway_device_id)
+            if gateway_registry_device_id := _get_tydom_gateway_registry_device_id(
+                self.hass, self._device
+            ):
+                info["via_device_id"] = gateway_registry_device_id
 
         return info
 
@@ -770,15 +821,8 @@ class BinarySensorBase(BinarySensorEntity):
         self._device = device
 
     def _get_hub(self):
-        """Get the hub instance from hass data."""
-        if not hasattr(self, "hass") or self.hass is None:
-            return None
-        if DOMAIN not in self.hass.data:
-            return None
-        hubs = self.hass.data[DOMAIN]
-        if not hubs:
-            return None
-        return next(iter(hubs.values()))
+        """Return the hub that owns this entity's TYDOM device."""
+        return _get_hub_for_tydom_device(self.hass, self._device)
 
     def _get_tydom_gateway_device_id(self) -> str | None:
         """Get the Tydom gateway device_id to use as via_device_id."""
@@ -846,7 +890,10 @@ class BinarySensorBase(BinarySensorEntity):
         # Link to gateway if available
         gateway_device_id = self._get_tydom_gateway_device_id()
         if gateway_device_id is not None and gateway_device_id != registry_device_id:
-            info["via_device"] = (DOMAIN, gateway_device_id)
+            if gateway_registry_device_id := _get_tydom_gateway_registry_device_id(
+                self.hass, self._device
+            ):
+                info["via_device_id"] = gateway_registry_device_id
         return info
 
     async def async_added_to_hass(self):
@@ -909,15 +956,8 @@ class GenericBinarySensor(BinarySensorBase):
             self._attr_entity_category = EntityCategory.DIAGNOSTIC
 
     def _get_hub(self):
-        """Get the hub instance from hass data."""
-        if not hasattr(self, "hass") or self.hass is None:
-            return None
-        if DOMAIN not in self.hass.data:
-            return None
-        hubs = self.hass.data[DOMAIN]
-        if not hubs:
-            return None
-        return next(iter(hubs.values()))
+        """Return the hub that owns this entity's TYDOM device."""
+        return _get_hub_for_tydom_device(self.hass, self._device)
 
     def _get_tydom_gateway_device_id(self) -> str | None:
         """Get the Tydom gateway device_id to use as via_device_id."""
@@ -1093,15 +1133,8 @@ class ClockSensor(SensorEntity):
         return attrs
 
     def _get_hub(self):
-        """Get the hub instance from hass data."""
-        if not hasattr(self, "hass") or self.hass is None:
-            return None
-        if DOMAIN not in self.hass.data:
-            return None
-        hubs = self.hass.data[DOMAIN]
-        if not hubs:
-            return None
-        return next(iter(hubs.values()))
+        """Return the hub that owns this entity's TYDOM device."""
+        return _get_hub_for_tydom_device(self.hass, self._device)
 
     @property
     def device_info(self) -> DeviceInfo:
@@ -1214,15 +1247,8 @@ class GeolocationSensor(SensorEntity):
         return attrs
 
     def _get_hub(self):
-        """Get the hub instance from hass data."""
-        if not hasattr(self, "hass") or self.hass is None:
-            return None
-        if DOMAIN not in self.hass.data:
-            return None
-        hubs = self.hass.data[DOMAIN]
-        if not hubs:
-            return None
-        return next(iter(hubs.values()))
+        """Return the hub that owns this entity's TYDOM device."""
+        return _get_hub_for_tydom_device(self.hass, self._device)
 
     @property
     def device_info(self) -> DeviceInfo:
@@ -5042,8 +5068,11 @@ class HAScene(Scene, HAEntity):
         - Otherwise TWC scenes use virtual zone (Day/Night) devices
         - Other scenes are grouped into a virtual "Scènes Tydom" device
         """
-        # Get gateway device ID for via_device fallback
+        # Get gateway identifiers for the parent device link.
         gateway_device_id = self._get_tydom_gateway_device_id()
+        gateway_registry_device_id = _get_tydom_gateway_registry_device_id(
+            self.hass, self._device
+        )
 
         # Ensure gateway_device_id is available - if not, we can't create proper device_info
         if not gateway_device_id:
@@ -5096,8 +5125,9 @@ class HAScene(Scene, HAEntity):
                             "identifiers": {(DOMAIN, registry_device_id)},
                             "name": str(tywell_device.device_name),
                             "manufacturer": "Delta Dore",
-                            "via_device": (DOMAIN, str(gateway_device_id)),
                         }
+                        if gateway_registry_device_id:
+                            device_info["via_device_id"] = gateway_registry_device_id
                         product_name = getattr(tywell_device, "productName", None)
                         if product_name:
                             device_info["model"] = str(product_name)
@@ -5117,7 +5147,8 @@ class HAScene(Scene, HAEntity):
                 "model": "Tywell Control",
             }
 
-            device_info["via_device"] = (DOMAIN, gateway_device_id)
+            if gateway_registry_device_id:
+                device_info["via_device_id"] = gateway_registry_device_id
 
             LOGGER.debug(
                 "TWC scene device_info: scene=%s, is_twc=%s, zone=%s, device_identifier=%s",
@@ -5137,8 +5168,8 @@ class HAScene(Scene, HAEntity):
                 "manufacturer": "Delta Dore",
                 "model": "Tydom Scenes",
             }
-            if gateway_device_id:
-                info["via_device"] = (DOMAIN, gateway_device_id)
+            if gateway_registry_device_id:
+                info["via_device_id"] = gateway_registry_device_id
             return info
 
     async def async_added_to_hass(self) -> None:
@@ -5271,11 +5302,19 @@ class HAScene(Scene, HAEntity):
             # Find entities for each affected device
             related_entities = []
             found_devices = []
+            hub = self._get_hub()
+            entry = getattr(hub, "_entry", None)
+            if entry is None:
+                LOGGER.debug(
+                    "Cannot resolve scene-device relations for %s without its config entry",
+                    self._device.device_id,
+                )
+                return
 
             for affected_device_id in affected_device_ids:
-                # Find the device in the registry
-                device_entry = device_registry.async_get_device(
-                    identifiers={(DOMAIN, affected_device_id)}
+                # Device identifiers are scoped to one TYDOM config entry.
+                device_entry = device_registry.async_get_device_by_identifier(
+                    (DOMAIN, affected_device_id), entry.entry_id
                 )
 
                 if not device_entry:
@@ -5674,13 +5713,17 @@ class HAMoment(SwitchEntity, HAEntity):
     @property
     def device_info(self) -> DeviceInfo:
         """Return information to link this entity with the gateway device."""
-        return {
+        info: DeviceInfo = {
             "identifiers": {(DOMAIN, self._device.device_id)},
             "name": self._device.device_name,
             "manufacturer": "Delta Dore",
             "model": "Tydom Moment",
-            "via_device": (DOMAIN, self._get_tydom_gateway_device_id() or ""),
         }
+        if gateway_registry_device_id := _get_tydom_gateway_registry_device_id(
+            self.hass, self._device
+        ):
+            info["via_device_id"] = gateway_registry_device_id
+        return info
 
     @property
     def is_on(self) -> bool:
@@ -5920,9 +5963,10 @@ class HAGroupEntity(HAEntity):
             "manufacturer": "Delta Dore",
             "model": f"Tydom {self._device.group_usage.title()} Group",
         }
-        gateway_device_id = self._get_tydom_gateway_device_id()
-        if gateway_device_id is not None:
-            info["via_device"] = (DOMAIN, gateway_device_id)
+        if gateway_registry_device_id := _get_tydom_gateway_registry_device_id(
+            self.hass, self._device
+        ):
+            info["via_device_id"] = gateway_registry_device_id
         return info
 
     @property
