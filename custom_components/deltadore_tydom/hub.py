@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import copy
+import secrets
 import time
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -993,8 +994,21 @@ def _next_interrupter_name(config: dict[str, object]) -> str:
     return f"Interrupteur {number}"
 
 
+def _new_related_endpoints_group_id(config: dict[str, object]) -> int:
+    """Return an unused positive group id for a locally configured product."""
+    existing_ids = {
+        str(group.get("id"))
+        for group in config.get("groups", [])
+        if isinstance(group, dict) and group.get("id") is not None
+    }
+    while True:
+        group_id = secrets.randbelow(2_147_483_646) + 1
+        if str(group_id) not in existing_ids:
+            return group_id
+
+
 async def configure_tyxia_2600_interrupter(device, channel: str) -> str:
-    """Persist one discovered TYXIA 2600 button as an interrupter.
+    """Add a discovered TYXIA 2600 output to an app-visible two-button group.
 
     Radio discovery alone creates an unconfigured X3D product. The official
     app then adds a single endpoint configuration with the ``interrupter``
@@ -1008,7 +1022,14 @@ async def configure_tyxia_2600_interrupter(device, channel: str) -> str:
     tydom_client = getattr(device, "_tydom_client", None)
     get_config = getattr(tydom_client, "get_config_file_document", None)
     post_config = getattr(tydom_client, "post_config_file_document", None)
-    if not device_id or not endpoint_id or not callable(get_config) or not callable(post_config):
+    get_groups = getattr(tydom_client, "get_groups_file_document", None)
+    post_groups = getattr(tydom_client, "post_groups_file_document", None)
+    if (
+        not device_id
+        or not endpoint_id
+        or not callable(get_config)
+        or not callable(post_config)
+    ):
         raise ValueError("The selected endpoint cannot be configured safely")
 
     config = await get_config()
@@ -1024,26 +1045,114 @@ async def configure_tyxia_2600_interrupter(device, channel: str) -> str:
         raise ValueError("This TYXIA 2600 button is already configured")
 
     button = channel.removeprefix("Bouton ")
-    name = _next_interrupter_name(config)
+    endpoint_config = {
+        "id_device": int(device_id),
+        "id_endpoint": int(endpoint_id),
+        "name": _next_interrupter_name(config),
+        "picto": "default_device",
+        "first_usage": "interrupter",
+        "last_usage": "interrupter",
+        "widget_behavior": {
+            "action": "TOGGLE",
+            "tutorial_id": f"switch_tyxia2600_btn_{button.lower()}",
+        },
+        "anticipation_start": False,
+        "skill": "TYDOM_X3D",
+        "space_id": "",
+    }
+    siblings = [
+        endpoint
+        for endpoint in endpoints
+        if isinstance(endpoint, dict)
+        and str(endpoint.get("id_device")) == device_id
+        and endpoint.get("last_usage") == "interrupter"
+    ]
+    if not siblings:
+        updated_config = copy.deepcopy(config)
+        updated_config["endpoints"].append(endpoint_config)
+        await post_config(updated_config)
+        return str(endpoint_config["name"])
+
+    if len(siblings) != 1 or not callable(get_groups) or not callable(post_groups):
+        raise ValueError(
+            "A complete TYXIA 2600 association requires one existing output "
+            "and writable /groups/file support"
+        )
+
+    sibling = siblings[0]
+    sibling_behavior = sibling.get("widget_behavior")
+    sibling_tutorial = (
+        sibling_behavior.get("tutorial_id")
+        if isinstance(sibling_behavior, dict)
+        else None
+    )
+    if not isinstance(sibling_tutorial, str) or not sibling_tutorial.startswith(
+        "switch_tyxia2600_btn_"
+    ):
+        raise ValueError("The existing interrupter is not a TYXIA 2600 draft")
+    sibling_button = sibling_tutorial.removeprefix("switch_tyxia2600_btn_").upper()
+    if sibling_button not in {"A", "B"} or sibling_button == button:
+        raise ValueError("Select the other TYXIA 2600 button to complete the pair")
+
+    groups = await get_groups()
+    group_memberships = groups.get("groups") if isinstance(groups, dict) else None
+    config_groups = config.get("groups")
+    if not isinstance(group_memberships, list) or not isinstance(config_groups, list):
+        raise TypeError("The gateway returned malformed association documents")
+
+    name = str(sibling.get("name") or endpoint_config["name"])
+    sibling_endpoint_id = sibling.get("id_endpoint")
+    if sibling_endpoint_id is None:
+        raise ValueError("The TYXIA 2600 draft has no endpoint id")
+    group_id = _new_related_endpoints_group_id(config)
+
     updated_config = copy.deepcopy(config)
-    updated_config["endpoints"].append(
+    for configured_endpoint in updated_config["endpoints"]:
+        if (
+            isinstance(configured_endpoint, dict)
+            and str(configured_endpoint.get("id_device")) == device_id
+            and str(configured_endpoint.get("id_endpoint")) == str(sibling_endpoint_id)
+        ):
+            configured_endpoint["name"] = f"CG_DD_COMMON_BUTTON{sibling_button}"
+    endpoint_config["name"] = f"CG_DD_COMMON_BUTTON{button}"
+    updated_config["endpoints"].append(endpoint_config)
+    updated_config["groups"].append(
         {
-            "id_device": int(device_id),
-            "id_endpoint": int(endpoint_id),
+            "id": group_id,
             "name": name,
-            "picto": "default_device",
-            "first_usage": "interrupter",
-            "last_usage": "interrupter",
-            "widget_behavior": {
-                "action": "TOGGLE",
-                "tutorial_id": f"switch_tyxia2600_btn_{button.lower()}",
-            },
-            "anticipation_start": False,
-            "skill": "TYDOM_X3D",
-            "space_id": "",
+            "usage": "interrupter",
+            "type": "relatedendpoints",
+            "widget_behavior": {"tutorial_id": "switch_tyxia2600"},
         }
     )
-    await post_config(updated_config)
+    updated_groups = copy.deepcopy(groups)
+    updated_groups["groups"].append(
+        {
+            "id": group_id,
+            "devices": [
+                {
+                    "id": int(device_id),
+                    "endpoints": [
+                        {"id": int(sibling_endpoint_id)},
+                        {"id": int(endpoint_id)},
+                    ],
+                }
+            ],
+        }
+    )
+
+    config_updated = False
+    try:
+        await post_config(updated_config)
+        config_updated = True
+        await post_groups(updated_groups)
+    except Exception:
+        if config_updated:
+            try:
+                await post_config(config)
+            except Exception:
+                LOGGER.exception("Unable to restore /configs/file after pairing failure")
+        raise
     return name
 
 
