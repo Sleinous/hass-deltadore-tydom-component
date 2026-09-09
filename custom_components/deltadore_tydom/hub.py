@@ -1010,9 +1010,9 @@ def _new_related_endpoints_group_id(config: dict[str, object]) -> int:
 async def configure_tyxia_2600_interrupter(device, channel: str) -> str:
     """Add a discovered TYXIA 2600 output to an app-visible two-button group.
 
-    Radio discovery alone creates an unconfigured X3D product. The official
-    app then adds a single endpoint configuration with the ``interrupter``
-    usage; mirroring that record avoids leaving it under *Non géré*.
+    Radio discovery alone creates an unconfigured X3D product. The first
+    output becomes a draft; pairing the other output creates the configuration
+    and membership records used by the official app for a complete TYXIA 2600.
     """
     if channel not in {"Bouton A", "Bouton B"}:
         raise ValueError(f"Unsupported TYXIA 2600 channel: {channel!r}")
