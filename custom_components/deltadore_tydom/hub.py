@@ -1727,10 +1727,6 @@ class Hub:
     def association_product_label(self) -> str:
         """Return the label of the currently selected product family."""
         return self._association_product
-    @property
-    def association_usage_label(self) -> str:
-        """Return the currently selected application usage."""
-        return self._association_category
 
     @property
     def association_product_supported(self) -> bool:
