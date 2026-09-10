@@ -1776,7 +1776,10 @@ class Hub:
         tutorial = OFFICIAL_ASSOCIATION_TUTORIALS.get(self._association_product, ())
         instructions = []
         for index, step in enumerate(tutorial, start=1):
-            text = " ".join(step.text.split())
+            # The catalogue stores some French quotes as JSON-escaped text.
+            # They are already decoded at this point, so remove the remaining
+            # literal escape marker before exposing the instruction in HA.
+            text = " ".join(step.text.split()).replace('\\"', '"')
             if step.starts_gateway_listening:
                 text = (
                     f"{text} Dans Home Assistant, appuyez alors sur "
