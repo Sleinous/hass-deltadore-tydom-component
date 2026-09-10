@@ -23,11 +23,13 @@ from custom_components.deltadore_tydom.ha_entities import (
 from custom_components.deltadore_tydom.official_association_tutorials import (
     OFFICIAL_ASSOCIATION_TUTORIALS,
     _COMPLEX_ILLUSTRATION_VECTORS,
+    _CURRENT_CATALOGUE_ILLUSTRATION_VECTORS,
     _EXACT_STANDARD_ILLUSTRATION_VECTORS,
     _STANDARD_ILLUSTRATION_VECTORS,
     get_association_illustration_data_url,
     get_association_illustration_layout,
     get_association_illustration_svg,
+    get_official_association_tutorial_id,
 )
 from custom_components.deltadore_tydom.const import DOMAIN
 from custom_components.deltadore_tydom.tydom.tydom_devices import (
@@ -192,6 +194,7 @@ class GatewayAssociationTests(IsolatedAsyncioTestCase):
     def test_all_official_vector_colours_are_resolved_for_browsers(self) -> None:
         """Never let an Android @color reference render black in HA."""
         image_ids = set(_COMPLEX_ILLUSTRATION_VECTORS)
+        image_ids.update(_CURRENT_CATALOGUE_ILLUSTRATION_VECTORS)
         image_ids.update(_STANDARD_ILLUSTRATION_VECTORS)
         image_ids.update(_EXACT_STANDARD_ILLUSTRATION_VECTORS)
 
@@ -208,6 +211,18 @@ class GatewayAssociationTests(IsolatedAsyncioTestCase):
             "catalog_rcu_tl2000_btn1_step3"
         )
         self.assertIn('fill-opacity="0.5"', transparent_step)
+
+    def test_current_catalogue_product_uses_its_official_visuals(self) -> None:
+        """Newer APK catalogue products must not fall back to a text-only guide."""
+        tutorial_id = get_official_association_tutorial_id(
+            "SMART PLUG DELTA DORE", "Prise"
+        )
+
+        self.assertEqual(tutorial_id, "smart_plug_DD")
+        _, steps, stepwise = get_association_illustration_layout(tutorial_id)
+        self.assertTrue(stepwise)
+        self.assertEqual(steps[0], "catalog_smart_plug_dd_step_check_led")
+        self.assertIsNotNone(get_association_illustration_svg(steps[0]))
 
     async def test_guide_button_opens_the_frontend_dialog(self) -> None:
         """The guide control sends structured data instead of a notification."""

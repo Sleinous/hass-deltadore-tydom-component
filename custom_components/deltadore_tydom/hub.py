@@ -1721,7 +1721,9 @@ class Hub:
         product = self._selected_groupable_product()
         if product is None:
             return get_association_illustration_ids(
-                get_official_association_tutorial_id(self._association_product)
+                get_official_association_tutorial_id(
+                    self._association_product, self._association_category
+                )
             )
         channel = next(
             (
@@ -1743,7 +1745,9 @@ class Hub:
         product = self._selected_groupable_product()
         if product is None:
             return get_association_illustration_layout(
-                get_official_association_tutorial_id(self._association_product)
+                get_official_association_tutorial_id(
+                    self._association_product, self._association_category
+                )
             )
         channel = next(
             (
