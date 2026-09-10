@@ -337,6 +337,19 @@ class GatewayAssociationTests(IsolatedAsyncioTestCase):
             OFFICIAL_ASSOCIATION_TUTORIALS["TUBAUTO Procom 10-3"][0].text,
         )
 
+    def test_association_instructions_unescape_catalogue_quotes(self) -> None:
+        """Never display JSON escape markers in the Home Assistant guide."""
+        tydom_hub = object.__new__(Hub)
+        tydom_hub._association_controls = []
+        tydom_hub._association_category = "Éclairages"
+        tydom_hub._association_product = "TYXIA 4801"
+        tydom_hub._association_profile = "official:lighting_X3D_x3d_rm"
+
+        instructions = tydom_hub.association_instructions
+
+        self.assertIn('« Associer ».', instructions[1])
+        self.assertNotIn('\\"', "\n".join(instructions))
+
     def test_tyxia_5610_uses_its_official_physical_guide(self) -> None:
         """A standard product must expose its own guide, not a generic recipe."""
         tydom_hub = object.__new__(Hub)
