@@ -17,6 +17,9 @@ from custom_components.deltadore_tydom.hub import (
 )
 from custom_components.deltadore_tydom.ha_entities import HADeviceRemovalButton
 from custom_components.deltadore_tydom.hub import Hub
+from custom_components.deltadore_tydom.official_association_tutorials import (
+    OFFICIAL_ASSOCIATION_TUTORIALS,
+)
 from custom_components.deltadore_tydom.const import DOMAIN
 from custom_components.deltadore_tydom.tydom.tydom_devices import (
     TydomInterrupter,
@@ -235,6 +238,29 @@ class GatewayAssociationTests(IsolatedAsyncioTestCase):
     def test_official_catalog_profiles_are_available_to_the_gateway(self) -> None:
         """Keep every app-derived recipe addressable by product selection."""
         self.assertGreaterEqual(len(OFFICIAL_DISCOVERY_PROFILES), 30)
+
+    def test_every_active_official_model_has_a_tutorial_when_one_exists(self) -> None:
+        """Keep the complete app-derived physical-guide catalogue available."""
+        # The app has 229 active entries, but several are usage variants of
+        # the same hardware and only 130 unique models expose a local guide.
+        self.assertGreaterEqual(len(OFFICIAL_ASSOCIATION_TUTORIALS), 130)
+
+    def test_tyxia_5610_uses_its_official_physical_guide(self) -> None:
+        """A standard product must expose its own guide, not a generic recipe."""
+        tydom_hub = object.__new__(Hub)
+        tydom_hub._association_controls = []
+        tydom_hub._association_category = "Éclairages"
+        tydom_hub._association_product = "TYXIA 5610"
+        tydom_hub._association_profile = "official:light_X3D_x3d_rm"
+        tydom_hub._association_channel = None
+
+        self.assertEqual(len(tydom_hub.association_instructions), 2)
+        self.assertIn("3 secondes", tydom_hub.association_instructions[0])
+        self.assertIn("LED rouge", tydom_hub.association_instructions[1])
+        self.assertIn(
+            "Lancer l'écoute de la passerelle",
+            tydom_hub.association_instructions[1],
+        )
 
     async def test_association_uses_the_gateway_client(self) -> None:
         """Association is sent through the configured gateway client."""
