@@ -171,13 +171,6 @@ def _load_tutorial_catalog() -> tuple[
     OFFICIAL_ASSOCIATION_TUTORIAL_IDS,
 ) = _load_tutorial_catalog()
 
-# These three products use the shared TYXIA 4000 catalogue tutorial, whose
-# vectors show a screwdriver/cabling rather than an association gesture. Do
-# not apply this exception to the other products that happen to share its ID.
-_NON_INSTRUCTIONAL_PRODUCT_VISUALS: Final = frozenset(
-    {"TYXIA 4600", "TYXIA 4610", "TYXIA 4620"}
-)
-
 def get_official_association_tutorial_id(product: str | None) -> str | None:
     """Return the official tutorial identifier selected for a product."""
     if product is None:
@@ -3870,7 +3863,7 @@ _COMPLEX_TUTORIAL_ILLUSTRATIONS, _COMPLEX_ILLUSTRATION_VECTORS = (
 
 
 def get_association_illustration_layout(
-    tutorial_id: str | None, *, product: str | None = None
+    tutorial_id: str | None,
 ) -> tuple[str | None, tuple[str, ...], bool]:
     """Return the official product overview and ordered instructional visuals.
 
@@ -3884,15 +3877,17 @@ def get_association_illustration_layout(
         return None, (), False
     if tutorial_id in _COMPLEX_TUTORIAL_ILLUSTRATIONS:
         return None, _COMPLEX_TUTORIAL_ILLUSTRATIONS[tutorial_id], False
-    if product in _NON_INSTRUCTIONAL_PRODUCT_VISUALS:
-        return None, (), True
     illustrations = _EXACT_STANDARD_TUTORIAL_ILLUSTRATIONS.get(tutorial_id, ())
     if not illustrations:
         return None, (), False
     # The first image is a catalogue thumbnail, not an instructional visual.
-    # Keep only the physical step visuals, regardless of whether a tutorial is
-    # specific to a product or shared by a product series.
-    return None, illustrations[1:], True
+    # Keep only physical step visuals when available. A few official tutorials
+    # provide only that product illustration; retain it as an overview instead
+    # of dropping their sole visual resource.
+    steps = illustrations[1:]
+    if steps:
+        return None, steps, True
+    return illustrations[0], (), False
 
 
 def get_association_illustration_ids(tutorial_id: str | None) -> tuple[str, ...]:
