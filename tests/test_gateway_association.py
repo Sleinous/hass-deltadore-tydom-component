@@ -309,6 +309,20 @@ class GatewayAssociationTests(IsolatedAsyncioTestCase):
         self.assertEqual(len(tydom_hub.association_instructions), 2)
         self.assertIn("3 secondes", tydom_hub.association_instructions[0])
         self.assertIn("LED rouge", tydom_hub.association_instructions[1])
+        self.assertEqual(
+            tydom_hub.association_illustration_ids,
+            (
+                "catalog_7_tyxia_serie4000",
+                "catalog_7_tyxia_serie4000_tuto1",
+                "catalog_7_tyxia_serie4000_tuto2",
+            ),
+        )
+        self.assertIn(
+            "<svg",
+            get_association_illustration_svg(
+                tydom_hub.association_illustration_ids[0]
+            ),
+        )
         self.assertIn(
             "Lancer l'écoute de la passerelle",
             tydom_hub.association_instructions[1],
