@@ -131,6 +131,16 @@ _COMPRESSED_CATALOG: Final = (
 )
 
 
+def _repair_catalogue_text(text: str) -> str:
+    """Repair UTF-8 text that the app catalogue stored as Windows-1252."""
+    if "\u00c3" not in text and "\u00c2" not in text:
+        return text
+    try:
+        return text.encode("cp1252").decode("utf-8")
+    except UnicodeError:
+        return text
+
+
 def _load_tutorials() -> dict[str, tuple[OfficialAssociationStep, ...]]:
     """Decode the read-only official product tutorial catalogue."""
     payload = json.loads(
@@ -140,7 +150,7 @@ def _load_tutorials() -> dict[str, tuple[OfficialAssociationStep, ...]]:
     return {
         product: tuple(
             OfficialAssociationStep(
-                text=step["text"],
+                text=_repair_catalogue_text(step["text"]),
                 starts_gateway_listening=step["launch"],
             )
             for step in tutorials[tutorial_id]
