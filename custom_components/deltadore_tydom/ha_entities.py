@@ -85,6 +85,7 @@ from homeassistant.components.switch import SwitchEntity
 from homeassistant.components.button import ButtonEntity
 from homeassistant.components.number import NumberEntity
 from homeassistant.components.select import SelectEntity
+from homeassistant.components.text import TextEntity, TextMode
 from homeassistant.components.event import EventDeviceClass, EventEntity
 from .tydom.tydom_devices import (
     Tydom,
@@ -6934,6 +6935,34 @@ class HAGatewayAssociationUsageSelect(_GatewayAssociationEntity, SelectEntity):
     async def async_select_option(self, option: str) -> None:
         """Select a valid product usage and its exact discovery recipe."""
         self._hub.set_association_usage(option)
+
+
+class HAGatewayAssociationNameText(_GatewayAssociationEntity, TextEntity):
+    """Choose the optional product name before starting its association."""
+
+    _attr_icon = "mdi:form-textbox"
+    _attr_mode = TextMode.TEXT
+    _attr_native_max = 64
+
+    def __init__(self, tydom_hub) -> None:
+        """Initialise the optional association-name field."""
+        super().__init__(tydom_hub)
+        self._attr_unique_id = f"{tydom_hub.hub_id}_association_name"
+        self._attr_name = "Nom de l'appareil (facultatif)"
+
+    @property
+    def available(self) -> bool:
+        """Only show the field for products that create a named group."""
+        return self._hub.association_name_supported
+
+    @property
+    def native_value(self) -> str:
+        """Return the optional name, or an empty field by default."""
+        return self._hub.association_name
+
+    async def async_set_value(self, value: str) -> None:
+        """Store the value until the selected association is finalised."""
+        self._hub.set_association_name(value)
 
 
 class HAGatewayAssociationGuideButton(_GatewayAssociationEntity, ButtonEntity):

@@ -18,6 +18,7 @@ from custom_components.deltadore_tydom.hub import (
 from custom_components.deltadore_tydom.hub import Hub
 from custom_components.deltadore_tydom.ha_entities import (
     HAGatewayAssociationGuideButton,
+    HAGatewayAssociationNameText,
     HADeviceRemovalButton,
 )
 from custom_components.deltadore_tydom.official_association_tutorials import (
@@ -183,6 +184,24 @@ class GatewayAssociationTests(IsolatedAsyncioTestCase):
         self.assertIn(
             "voie B (Bouton B)",
             tydom_hub.association_instructions[9],
+        )
+
+    def test_groupable_product_can_keep_an_optional_friendly_name(self) -> None:
+        """The name field is limited to groupable products and normalizes text."""
+        tydom_hub = object.__new__(Hub)
+        tydom_hub._association_controls = []
+        tydom_hub._association_category = "Interrupteurs"
+        tydom_hub._association_product = "TYXIA 2600"
+        tydom_hub._association_profile = "official:remote_X3D_direct"
+        tydom_hub._association_name = ""
+
+        tydom_hub.set_association_name("  Entrée   principale ")
+
+        self.assertTrue(tydom_hub.association_name_supported)
+        self.assertEqual(tydom_hub.association_name, "Entrée principale")
+        self.assertEqual(
+            HAGatewayAssociationNameText(tydom_hub).native_value,
+            "Entrée principale",
         )
 
     def test_tyxia_2600_exposes_its_official_visual_steps(self) -> None:
@@ -893,6 +912,49 @@ class GatewayAssociationTests(IsolatedAsyncioTestCase):
         self.assertEqual(group["usage"], "remoteControl")
         self.assertEqual(group["widget_behavior"]["tutorial_id"], "tl2000")
         self.assertEqual(calls[1][0], "groups")
+
+    async def test_groupable_product_uses_the_requested_name_for_new_group(self) -> None:
+        """A name entered before pairing becomes the TYDOM group name."""
+        config = {"endpoints": [], "groups": []}
+        groups = {"groups": []}
+        calls: list[tuple[str, dict]] = []
+
+        async def get_config_file_document() -> dict:
+            return config
+
+        async def get_groups_file_document() -> dict:
+            return groups
+
+        async def post_config_file_document(document: dict) -> None:
+            calls.append(("config", document))
+
+        async def post_groups_file_document(document: dict) -> None:
+            calls.append(("groups", document))
+
+        device = SimpleNamespace(
+            _id="42",
+            _endpoint="84",
+            _tydom_client=SimpleNamespace(
+                get_config_file_document=get_config_file_document,
+                get_groups_file_document=get_groups_file_document,
+                post_config_file_document=post_config_file_document,
+                post_groups_file_document=post_groups_file_document,
+            ),
+        )
+
+        with patch(
+            "custom_components.deltadore_tydom.hub.secrets.randbelow",
+            return_value=11,
+        ):
+            name = await configure_groupable_product(
+                device,
+                GROUPABLE_ASSOCIATION_BY_LABEL["TYXIA 2600"],
+                "Bouton A",
+                "Entrée",
+            )
+
+        self.assertEqual(name, "Entrée")
+        self.assertEqual(calls[0][1]["groups"][0]["name"], "Entrée")
 
     async def test_isolated_tyxia_2600_button_removal_updates_config_then_radio(
         self,
