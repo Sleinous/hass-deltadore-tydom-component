@@ -94,9 +94,9 @@ from .ha_entities import (
 
 from .const import DOMAIN, LOGGER, STRUCTURED_LOGGER, get_polling_interval_for_validity
 from .official_association_tutorials import (
-    OFFICIAL_ASSOCIATION_TUTORIALS,
     get_association_illustration_layout,
     get_association_illustration_ids,
+    get_official_association_tutorial,
     get_official_association_tutorial_id,
 )
 from .remote_registry_migration import migrate_legacy_remote_endpoint
@@ -1834,7 +1834,9 @@ class Hub:
                 for step in product.guide
             )
 
-        tutorial = OFFICIAL_ASSOCIATION_TUTORIALS.get(self._association_product, ())
+        tutorial = get_official_association_tutorial(
+            self._association_product, self._association_category
+        )
         instructions = []
         for index, step in enumerate(tutorial, start=1):
             # The catalogue stores some French quotes as JSON-escaped text.
