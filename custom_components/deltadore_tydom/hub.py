@@ -1517,6 +1517,9 @@ class Hub:
             tuple[GroupableAssociationProduct, str] | None
         ) = None
         self._pending_groupable_known_device_ids: set[str] = set()
+        self._pending_groupable_candidate_device_id: str | None = None
+        self._pending_groupable_auto_finalize_task: asyncio.Task[None] | None = None
+        self._pending_groupable_auto_finalize_failed = False
         self._refresh_energy_buttons_created: set[str] = set()
         self._device_association_buttons_created: set[tuple[str, str]] = set()
         self._remote_battery_entities: dict[str, HARemoteBattery] = {}
@@ -1994,6 +1997,8 @@ class Hub:
             raise
         if product is not None:
             self._pending_groupable_association = (product, self._association_channel)
+            self._pending_groupable_candidate_device_id = None
+            self._pending_groupable_auto_finalize_failed = False
         else:
             self._pending_groupable_association = None
             self._pending_groupable_known_device_ids.clear()
@@ -2584,9 +2589,8 @@ class Hub:
         buttons = []
         finalization_key = (device.device_id, "finalize_groupable_product")
         pending_association = self._pending_groupable_association
-        if (
-            finalization_key not in self._device_association_buttons_created
-            and pending_association is not None
+        is_new_groupable_candidate = (
+            pending_association is not None
             and device.device_id not in self._pending_groupable_known_device_ids
             and (
                 (
@@ -2595,6 +2599,38 @@ class Hub:
                 )
                 or isinstance(device, TydomInterrupter)
             )
+        )
+        if (
+            is_new_groupable_candidate
+            and not self._pending_groupable_auto_finalize_failed
+            and self._pending_groupable_candidate_device_id is None
+        ):
+            # A selected TYXIA channel supplies all necessary metadata.  Wait
+            # briefly for a second discovery event: if another product appears
+            # too, keep the conservative manual choice instead of guessing.
+            self._pending_groupable_candidate_device_id = device.device_id
+            self._pending_groupable_auto_finalize_task = self._hass.async_create_task(
+                self._async_auto_finalize_groupable_product(device)
+            )
+            return
+        if (
+            is_new_groupable_candidate
+            and not self._pending_groupable_auto_finalize_failed
+            and self._pending_groupable_candidate_device_id != device.device_id
+        ):
+            candidate_id = self._pending_groupable_candidate_device_id
+            self._pending_groupable_auto_finalize_failed = True
+            self._pending_groupable_candidate_device_id = None
+            if self._pending_groupable_auto_finalize_task is not None:
+                self._pending_groupable_auto_finalize_task.cancel()
+                self._pending_groupable_auto_finalize_task = None
+            if candidate_id is not None and (
+                candidate := self.devices.get(candidate_id)
+            ) is not None:
+                self._maybe_create_device_association_buttons(candidate)
+        if (
+            finalization_key not in self._device_association_buttons_created
+            and is_new_groupable_candidate
         ):
             product, channel = pending_association
             buttons.append(
@@ -2633,6 +2669,32 @@ class Hub:
         if buttons:
             self.add_button_callback(buttons)
 
+    async def _async_auto_finalize_groupable_product(
+        self, device: TydomRemoteControl | TydomInterrupter
+    ) -> None:
+        """Finalize one unambiguous discovered TYXIA channel automatically."""
+        await asyncio.sleep(1)
+        if (
+            self._pending_groupable_association is None
+            or self._pending_groupable_auto_finalize_failed
+            or self._pending_groupable_candidate_device_id != device.device_id
+        ):
+            return
+        try:
+            await self._finalize_groupable_product_association(
+                device, self._pending_groupable_association[1]
+            )
+        except Exception:
+            LOGGER.exception(
+                "Automatic post-discovery configuration failed for %s; "
+                "keeping the manual finalization action",
+                device.device_id,
+            )
+            self._pending_groupable_auto_finalize_failed = True
+            self._pending_groupable_candidate_device_id = None
+            self._pending_groupable_auto_finalize_task = None
+            self._maybe_create_device_association_buttons(device)
+
     async def _finalize_groupable_product_association(
         self, device: TydomRemoteControl | TydomInterrupter, channel: str
     ) -> None:
@@ -2646,6 +2708,9 @@ class Hub:
         name = await configure_groupable_product(device, product, channel)
         self._pending_groupable_association = None
         self._pending_groupable_known_device_ids.clear()
+        self._pending_groupable_candidate_device_id = None
+        self._pending_groupable_auto_finalize_failed = False
+        self._pending_groupable_auto_finalize_task = None
         LOGGER.info("Configured %s %s as %s", product.label, channel, name)
         await self.reload_devices()
 
