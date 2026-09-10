@@ -3863,14 +3863,30 @@ _COMPLEX_TUTORIAL_ILLUSTRATIONS, _COMPLEX_ILLUSTRATION_VECTORS = (
 )
 
 
-def get_association_illustration_ids(tutorial_id: str | None) -> tuple[str, ...]:
-    """Return the official illustration sequence for a product or channel."""
+def get_association_illustration_layout(
+    tutorial_id: str | None,
+) -> tuple[str | None, tuple[str, ...]]:
+    """Return the official product overview and ordered instructional visuals.
+
+    Standard TYDOM tutorials distinguish the catalogue picture of a product from
+    the illustrations that belong to each physical step. Keep that distinction
+    so the frontend can place a visual next to the instruction it explains.
+    Complex channel-specific tutorials retain their existing gallery.
+    """
     if tutorial_id is None:
-        return ()
-    return _COMPLEX_TUTORIAL_ILLUSTRATIONS.get(
-        tutorial_id,
-        _EXACT_STANDARD_TUTORIAL_ILLUSTRATIONS.get(tutorial_id, ()),
-    )
+        return None, ()
+    if tutorial_id in _COMPLEX_TUTORIAL_ILLUSTRATIONS:
+        return None, _COMPLEX_TUTORIAL_ILLUSTRATIONS[tutorial_id]
+    illustrations = _EXACT_STANDARD_TUTORIAL_ILLUSTRATIONS.get(tutorial_id, ())
+    if not illustrations:
+        return None, ()
+    return illustrations[0], illustrations[1:]
+
+
+def get_association_illustration_ids(tutorial_id: str | None) -> tuple[str, ...]:
+    """Return the full official illustration sequence for a product or channel."""
+    overview, steps = get_association_illustration_layout(tutorial_id)
+    return ((overview,) if overview is not None else ()) + steps
 
 
 def _android_attr(element, name: str) -> str | None:

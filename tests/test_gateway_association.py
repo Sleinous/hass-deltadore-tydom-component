@@ -23,6 +23,7 @@ from custom_components.deltadore_tydom.ha_entities import (
 from custom_components.deltadore_tydom.official_association_tutorials import (
     OFFICIAL_ASSOCIATION_TUTORIALS,
     get_association_illustration_data_url,
+    get_association_illustration_layout,
     get_association_illustration_svg,
 )
 from custom_components.deltadore_tydom.const import DOMAIN
@@ -207,7 +208,10 @@ class GatewayAssociationTests(IsolatedAsyncioTestCase):
             association_channel_label="Bouton A",
             association_product_label="TYXIA 2600",
             association_instructions=("1. Préparez le bouton A.",),
-            association_illustration_ids=("catalog_switch_tyxia2600_btna_step1",),
+            association_illustration_layout=(
+                None,
+                ("catalog_switch_tyxia2600_btna_step1",),
+            ),
         )
         button = object.__new__(HAGatewayAssociationGuideButton)
         button._hub = guide_hub
@@ -222,6 +226,16 @@ class GatewayAssociationTests(IsolatedAsyncioTestCase):
         self.assertEqual(payload["instructions"], ["1. Préparez le bouton A."])
         self.assertEqual(len(payload["illustrations"]), 1)
         self.assertTrue(payload["illustrations"][0].startswith("data:image/svg+xml"))
+
+    def test_tymoov_radio_separates_overview_from_each_official_step(self) -> None:
+        """Avoid presenting product and step visuals as an unexplained gallery."""
+        overview, steps = get_association_illustration_layout("25_tymoov")
+
+        self.assertEqual(overview, "catalog_25_tymoov")
+        self.assertEqual(
+            steps,
+            ("catalog_25_tymoov_tuto1", "catalog_25_tymoov_tuto2"),
+        )
 
     def test_groupable_product_is_hidden_on_an_unsupported_gateway(self) -> None:
         """Do not expose a stale multi-channel flow on TYDOM 1/2 or Hub Tyxal+."""
