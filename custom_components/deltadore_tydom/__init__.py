@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import asyncio
 
+from aiohttp import web
 import homeassistant.helpers.config_validation as cv
+from homeassistant.components.http import HomeAssistantView
 from homeassistant.const import CONF_HOST, CONF_MAC, CONF_PIN, Platform
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
@@ -27,6 +29,7 @@ from .hub import (
     remove_product_association,
     start_product_association,
 )
+from .official_association_tutorials import get_association_illustration_svg
 
 # Config schema for hassfest validation
 CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
@@ -53,8 +56,25 @@ PLATFORMS: list[str] = [
 ]
 
 
+class AssociationGuideIllustrationView(HomeAssistantView):
+    """Serve bundled official association illustrations to HA users."""
+
+    url = "/api/deltadore_tydom/association-guide/{image_id}.svg"
+    name = "api:deltadore_tydom:association_guide"
+    requires_auth = True
+
+    async def get(self, request, image_id: str):
+        """Return one safe, converted SVG illustration."""
+        svg = get_association_illustration_svg(image_id)
+        if svg is None:
+            raise web.HTTPNotFound()
+        return web.Response(text=svg, content_type="image/svg+xml")
+
+
 async def async_setup(hass: HomeAssistant, config: dict) -> bool:
     """Set up the Delta Dore Tydom integration."""
+
+    hass.http.register_view(AssociationGuideIllustrationView())
 
     def get_tydom_device(entity_id: str):
         """Return the TYDOM device represented by an integration entity."""
