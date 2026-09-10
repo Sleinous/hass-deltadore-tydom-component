@@ -12,10 +12,18 @@ class DeltaDoreAssociationGuideDialog extends HTMLElement {
     this._render();
   }
 
-  showGuide({ title, instructions, illustrations }) {
+  showGuide({
+    title,
+    instructions,
+    overview,
+    illustrations,
+    illustration_mode: illustrationMode,
+  }) {
     this._title = title;
     this._instructions = instructions;
+    this._overview = overview;
     this._illustrations = illustrations;
+    this._illustrationMode = illustrationMode;
     this._render();
     this.shadowRoot.querySelector(".backdrop")?.classList.add("visible");
     this.shadowRoot.querySelector(".dialog")?.focus();
@@ -59,6 +67,8 @@ class DeltaDoreAssociationGuideDialog extends HTMLElement {
         li { line-height: 1.45; margin: 0 0 14px; white-space: pre-line; }
         h3 { font-size: 18px; margin: 28px 0 14px; }
         figure { margin: 0 0 20px; text-align: center; }
+        .overview { border-bottom: 1px solid var(--divider-color, #ddd); margin: 0 0 20px; padding-bottom: 16px; }
+        .step-illustration { margin: 12px 0 0; }
         img { display: block; height: auto; margin: 0 auto; max-width: 100%; }
         figcaption { color: var(--secondary-text-color, #666); font-size: 13px; margin-top: 6px; }
       </style>
@@ -69,6 +79,10 @@ class DeltaDoreAssociationGuideDialog extends HTMLElement {
             <button type="button" aria-label="Fermer">×</button>
           </header>
           <main>
+            <figure class="overview" hidden>
+              <img alt="Illustration officielle du produit">
+              <figcaption>Illustration officielle du produit</figcaption>
+            </figure>
             <ol class="instructions"></ol>
             <section class="illustrations" hidden>
               <h3>Illustrations officielles</h3>
@@ -91,14 +105,30 @@ class DeltaDoreAssociationGuideDialog extends HTMLElement {
     });
 
     this.shadowRoot.querySelector("#guide-title").textContent = this._title || "Guide d'association";
+    const overview = this.shadowRoot.querySelector(".overview");
+    if (this._overview) {
+      overview.querySelector("img").src = this._overview;
+      overview.hidden = false;
+    }
     const instructionList = this.shadowRoot.querySelector(".instructions");
-    (this._instructions || []).forEach((instruction) => {
+    (this._instructions || []).forEach((instruction, index) => {
       const item = document.createElement("li");
       item.textContent = instruction.replace(/^\d+\.\s*/, "");
+      if (this._illustrationMode === "steps" && this._illustrations?.[index]) {
+        const figure = document.createElement("figure");
+        figure.className = "step-illustration";
+        const image = document.createElement("img");
+        image.src = this._illustrations[index];
+        image.alt = `Illustration officielle de l'étape ${index + 1}`;
+        const caption = document.createElement("figcaption");
+        caption.textContent = `Illustration de l'étape ${index + 1}`;
+        figure.append(image, caption);
+        item.append(figure);
+      }
       instructionList.append(item);
     });
 
-    if (this._illustrations?.length) {
+    if (this._illustrationMode !== "steps" && this._illustrations?.length) {
       const section = this.shadowRoot.querySelector(".illustrations");
       const images = this.shadowRoot.querySelector(".images");
       section.hidden = false;
