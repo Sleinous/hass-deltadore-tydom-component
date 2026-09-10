@@ -204,6 +204,43 @@ class GatewayAssociationTests(IsolatedAsyncioTestCase):
             "Entrée principale",
         )
 
+    def test_any_associable_product_exposes_the_optional_name_field(self) -> None:
+        """A name may be chosen before any documented association profile."""
+        tydom_hub = object.__new__(Hub)
+        tydom_hub._association_controls = []
+        tydom_hub._association_category = "Éclairages"
+        tydom_hub._association_product = "TYXIA 5610"
+        tydom_hub._association_profile = "official:light_X3D_x3d_rm"
+
+        self.assertTrue(tydom_hub.association_name_supported)
+
+    def test_new_generic_product_receives_the_requested_ha_name(self) -> None:
+        """A generic association applies its requested name after discovery."""
+        tydom_hub = object.__new__(Hub)
+        tydom_hub._pending_groupable_association = None
+        tydom_hub._pending_association_name = "Lampe entrée"
+        tydom_hub._pending_association_known_device_ids = {"existing"}
+        tydom_hub._hass = MagicMock()
+        device = SimpleNamespace(
+            device_id="new",
+            registry_device_id="new",
+            device_name="Produit 2",
+        )
+        entry = SimpleNamespace(id="entry-id", name="Produit 2")
+        registry = MagicMock()
+        registry.async_get_device.return_value = entry
+
+        with patch(
+            "custom_components.deltadore_tydom.hub.dr.async_get",
+            return_value=registry,
+        ):
+            tydom_hub._maybe_apply_pending_association_name(device)
+
+        registry.async_update_device.assert_called_once_with(
+            "entry-id", name="Lampe entrée"
+        )
+        self.assertIsNone(tydom_hub._pending_association_name)
+
     def test_tyxia_2600_exposes_its_official_visual_steps(self) -> None:
         """Keep the selected channel linked to its app-provided illustrations."""
         tydom_hub = object.__new__(Hub)
