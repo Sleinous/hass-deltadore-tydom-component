@@ -95,6 +95,7 @@ from .const import DOMAIN, LOGGER, STRUCTURED_LOGGER, get_polling_interval_for_v
 from .official_association_tutorials import (
     OFFICIAL_ASSOCIATION_TUTORIALS,
     get_association_illustration_ids,
+    get_official_association_tutorial_id,
 )
 from .remote_registry_migration import migrate_legacy_remote_endpoint
 
@@ -1715,10 +1716,12 @@ class Hub:
 
     @property
     def association_illustration_ids(self) -> tuple[str, ...]:
-        """Return official visual steps for the selected physical channel."""
+        """Return official visual steps for the selected product or channel."""
         product = self._selected_groupable_product()
         if product is None:
-            return ()
+            return get_association_illustration_ids(
+                get_official_association_tutorial_id(self._association_product)
+            )
         channel = next(
             (
                 item
