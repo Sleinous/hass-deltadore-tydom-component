@@ -73,6 +73,7 @@ from .ha_entities import (
     HAGatewayAssociationCategorySelect,
     HAGatewayAssociationChannelSelect,
     HAGatewayAssociationGuideButton,
+    HAGatewayAssociationNameText,
     HAGatewayAssociationProductSelect,
     HAGatewayAssociationUsageSelect,
     HAGatewayStartAssociationButton,
@@ -1217,7 +1218,10 @@ def _new_related_endpoints_group_id(config: dict[str, object]) -> int:
 
 
 async def configure_groupable_product(
-    device, product: GroupableAssociationProduct, channel: str
+    device,
+    product: GroupableAssociationProduct,
+    channel: str,
+    name_override: str | None = None,
 ) -> str:
     """Configure one discovered channel as an app-visible product.
 
@@ -1299,7 +1303,8 @@ async def configure_groupable_product(
             raise ValueError("This TYXIA 2600 button is already configured")
         raise ValueError("This endpoint already belongs to another configured product")
 
-    name = (
+    requested_name = " ".join((name_override or "").split())
+    name = requested_name or (
         str(configured_endpoint.get("name"))
         if configured_endpoint is not None and configured_endpoint.get("name")
         else _next_groupable_product_name(config, product)
@@ -1476,6 +1481,7 @@ class Hub:
         self.add_button_callback = None
         self.add_number_callback = None
         self.add_select_callback = None
+        self.add_text_callback = None
         self.add_event_callback = None
 
         self._tydom_client = TydomClient(
@@ -1500,9 +1506,11 @@ class Hub:
         self._association_product = first_choice.label
         self._association_profile = first_choice.profile_id
         self._association_channel = "Bouton A"
+        self._association_name = ""
         self._pending_groupable_association: (
             tuple[GroupableAssociationProduct, str] | None
         ) = None
+        self._pending_groupable_name: str | None = None
         self._pending_groupable_known_device_ids: set[str] = set()
         self._pending_groupable_candidate_device_id: str | None = None
         self._pending_groupable_auto_finalize_task: asyncio.Task[None] | None = None
@@ -1624,6 +1632,7 @@ class Hub:
             and self.add_button_callback is not None
             and self.add_number_callback is not None
             and self.add_select_callback is not None
+            and self.add_text_callback is not None
             and self.add_event_callback is not None
             and self.add_binary_sensor_callback is not None
         )
@@ -1642,6 +1651,7 @@ class Hub:
             and not self._association_controls_created
             and self.add_button_callback is not None
             and self.add_select_callback is not None
+            and self.add_text_callback is not None
         ):
             self.add_select_callback(
                 [
@@ -1657,6 +1667,7 @@ class Hub:
                     HAGatewayStartAssociationButton(self),
                 ]
             )
+            self.add_text_callback([HAGatewayAssociationNameText(self)])
             self._association_controls_created = True
             LOGGER.debug("Gateway product-association controls created")
         return is_ready
@@ -1718,6 +1729,16 @@ class Hub:
         if not self.association_channel_labels:
             return None
         return self._association_channel
+
+    @property
+    def association_name(self) -> str:
+        """Return the optional name requested for a groupable product."""
+        return self._association_name
+
+    @property
+    def association_name_supported(self) -> bool:
+        """Whether the selected product is a named, groupable product."""
+        return self._selected_groupable_product() is not None
 
     @property
     def association_illustration_ids(self) -> tuple[str, ...]:
@@ -1914,6 +1935,14 @@ class Hub:
         self._association_channel = channel
         self._notify_association_controls()
 
+    def set_association_name(self, name: str) -> None:
+        """Set an optional friendly name for the product being associated."""
+        normalized_name = " ".join(name.split())
+        if len(normalized_name) > 64:
+            raise ValueError("The association name must not exceed 64 characters")
+        self._association_name = normalized_name
+        self._notify_association_controls()
+
     async def start_selected_product_association(self) -> None:
         """Start association using the product selected in the gateway controls."""
         if self._association_profile is None:
@@ -1941,10 +1970,12 @@ class Hub:
             raise
         if product is not None:
             self._pending_groupable_association = (product, self._association_channel)
+            self._pending_groupable_name = self._association_name or None
             self._pending_groupable_candidate_device_id = None
             self._pending_groupable_auto_finalize_failed = False
         else:
             self._pending_groupable_association = None
+            self._pending_groupable_name = None
             self._pending_groupable_known_device_ids.clear()
         LOGGER.info(
             "Started gateway association for %s on config entry %s",
@@ -2649,9 +2680,12 @@ class Hub:
         product, expected_channel = pending_association
         if channel != expected_channel:
             raise ValueError(f"This {product.label} association is no longer pending")
-        name = await configure_groupable_product(device, product, channel)
+        name = await configure_groupable_product(
+            device, product, channel, self._pending_groupable_name
+        )
         self._rename_new_groupable_device(device, name, product.label)
         self._pending_groupable_association = None
+        self._pending_groupable_name = None
         self._pending_groupable_known_device_ids.clear()
         self._pending_groupable_candidate_device_id = None
         self._pending_groupable_auto_finalize_failed = False
@@ -2900,6 +2934,7 @@ class Hub:
         if (
             self.add_button_callback is not None
             and self.add_select_callback is not None
+            and self.add_text_callback is not None
         ):
             self.add_select_callback(
                 [
@@ -2915,6 +2950,7 @@ class Hub:
                     HAGatewayStartAssociationButton(self),
                 ]
             )
+            self.add_text_callback([HAGatewayAssociationNameText(self)])
             self._association_controls_created = True
 
         LOGGER.info(
