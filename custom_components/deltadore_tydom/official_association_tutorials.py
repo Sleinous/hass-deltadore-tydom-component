@@ -171,6 +171,15 @@ def _load_tutorial_catalog() -> tuple[
     OFFICIAL_ASSOCIATION_TUTORIAL_IDS,
 ) = _load_tutorial_catalog()
 
+_OFFICIAL_SHARED_TUTORIAL_IDS: Final = frozenset(
+    tutorial_id
+    for tutorial_id in OFFICIAL_ASSOCIATION_TUTORIAL_IDS.values()
+    if sum(
+        mapped_tutorial_id == tutorial_id
+        for mapped_tutorial_id in OFFICIAL_ASSOCIATION_TUTORIAL_IDS.values()
+    ) > 1
+)
+
 
 def get_official_association_tutorial_id(product: str | None) -> str | None:
     """Return the official tutorial identifier selected for a product."""
@@ -3865,7 +3874,7 @@ _COMPLEX_TUTORIAL_ILLUSTRATIONS, _COMPLEX_ILLUSTRATION_VECTORS = (
 
 def get_association_illustration_layout(
     tutorial_id: str | None,
-) -> tuple[str | None, tuple[str, ...]]:
+) -> tuple[str | None, tuple[str, ...], bool]:
     """Return the official product overview and ordered instructional visuals.
 
     Standard TYDOM tutorials distinguish the catalogue picture of a product from
@@ -3874,19 +3883,29 @@ def get_association_illustration_layout(
     Complex channel-specific tutorials retain their existing gallery.
     """
     if tutorial_id is None:
-        return None, ()
+        return None, (), False
     if tutorial_id in _COMPLEX_TUTORIAL_ILLUSTRATIONS:
-        return None, _COMPLEX_TUTORIAL_ILLUSTRATIONS[tutorial_id]
+        return None, _COMPLEX_TUTORIAL_ILLUSTRATIONS[tutorial_id], False
     illustrations = _EXACT_STANDARD_TUTORIAL_ILLUSTRATIONS.get(tutorial_id, ())
     if not illustrations:
-        return None, ()
-    return illustrations[0], illustrations[1:]
+        return None, (), False
+    # The first image is a catalogue thumbnail. It is useful for a product with
+    # its own tutorial, but misleading for a tutorial shared by a whole series
+    # (for example TYXIA 4600/4610/5731). Keep only the physical step visuals.
+    overview = (
+        None if tutorial_id in _OFFICIAL_SHARED_TUTORIAL_IDS else illustrations[0]
+    )
+    return overview, illustrations[1:], True
 
 
 def get_association_illustration_ids(tutorial_id: str | None) -> tuple[str, ...]:
     """Return the full official illustration sequence for a product or channel."""
-    overview, steps = get_association_illustration_layout(tutorial_id)
-    return ((overview,) if overview is not None else ()) + steps
+    if tutorial_id is None:
+        return ()
+    return _COMPLEX_TUTORIAL_ILLUSTRATIONS.get(
+        tutorial_id,
+        _EXACT_STANDARD_TUTORIAL_ILLUSTRATIONS.get(tutorial_id, ()),
+    )
 
 
 def _android_attr(element, name: str) -> str | None:
