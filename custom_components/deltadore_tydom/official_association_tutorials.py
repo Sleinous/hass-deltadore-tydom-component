@@ -277,6 +277,35 @@ def get_official_association_tutorial_id(
     )
 
 
+def get_official_association_tutorial(
+    product: str | None, category: str | None = None
+) -> tuple[OfficialAssociationStep, ...]:
+    """Return the procedure available for the selected official product.
+
+    The historic catalogue stores its French prose alongside each model.  The
+    current Android catalogue stores that prose in its translated resource
+    bundle instead, but does still provide the complete official visual
+    sequence.  Do not make those products look unsupported in Home Assistant:
+    expose the visual procedure and the single gateway action that completes
+    it.
+    """
+    if product is None:
+        return ()
+    if tutorial := OFFICIAL_ASSOCIATION_TUTORIALS.get(product):
+        return tutorial
+    if get_official_association_tutorial_id(product, category) is None:
+        return ()
+    return (
+        OfficialAssociationStep(
+            "Suivez les étapes illustrées officielles ci-dessous pour préparer "
+            "l’appareil."
+        ),
+        OfficialAssociationStep(
+            "Lorsque l’appareil est prêt à être associé, appuyez sur « Lancer "
+            "l’écoute de la passerelle ».",
+        ),
+    )
+
 
 # Official Android Vector Drawable resources for the standard product
 # tutorials. These files are part of the official TYDOM application; retaining

@@ -29,6 +29,7 @@ from custom_components.deltadore_tydom.official_association_tutorials import (
     get_association_illustration_data_url,
     get_association_illustration_layout,
     get_association_illustration_svg,
+    get_official_association_tutorial,
     get_official_association_tutorial_id,
 )
 from custom_components.deltadore_tydom.const import DOMAIN
@@ -223,6 +224,18 @@ class GatewayAssociationTests(IsolatedAsyncioTestCase):
         self.assertTrue(stepwise)
         self.assertEqual(steps[0], "catalog_smart_plug_dd_step_check_led")
         self.assertIsNotNone(get_association_illustration_svg(steps[0]))
+
+    def test_current_catalogue_products_keep_their_guides_available(self) -> None:
+        """Products with APK visuals must never be shown as guide-less."""
+        for product, category in (
+            ("SMART PLUG DELTA DORE", "Prise"),
+            ("BULB DELTA DORE", "Ã‰clairages"),
+            ("NAVILINK PAC", "Thermique"),
+            ("THERMOSTAT DELTA 8000", "Thermique"),
+        ):
+            instructions = get_official_association_tutorial(product, category)
+            self.assertTrue(instructions, product)
+            self.assertIn("illustr", instructions[0].text, product)
 
     async def test_guide_button_opens_the_frontend_dialog(self) -> None:
         """The guide control sends structured data instead of a notification."""
