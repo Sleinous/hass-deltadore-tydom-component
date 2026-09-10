@@ -6916,7 +6916,7 @@ class HAGatewayAssociationNameText(_GatewayAssociationEntity, TextEntity):
 
     @property
     def available(self) -> bool:
-        """Only show the field for products that create a named group."""
+        """Show the field for every product the gateway can associate."""
         return self._hub.association_name_supported
 
     @property
