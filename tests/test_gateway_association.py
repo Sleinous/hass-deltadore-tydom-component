@@ -225,21 +225,15 @@ class GatewayAssociationTests(IsolatedAsyncioTestCase):
             ("catalog_25_tymoov_tuto1", "catalog_25_tymoov_tuto2"),
         )
 
-    def test_tyxia_series_guide_omits_its_catalogue_thumbnail(self) -> None:
-        """Do not imply that a catalogue picture identifies the selected model."""
+    def test_tyxia_series_guide_omits_its_non_instructional_visuals(self) -> None:
+        """Do not show the official screwdriver image as an association step."""
         overview, steps, stepwise = get_association_illustration_layout(
             "7_Tyxia_serie4000"
         )
 
         self.assertIsNone(overview)
         self.assertTrue(stepwise)
-        self.assertEqual(
-            steps,
-            (
-                "catalog_7_tyxia_serie4000_tuto1",
-                "catalog_7_tyxia_serie4000_tuto2",
-            ),
-        )
+        self.assertEqual(steps, ())
 
     def test_groupable_product_is_hidden_on_an_unsupported_gateway(self) -> None:
         """Do not expose a stale multi-channel flow on TYDOM 1/2 or Hub Tyxal+."""
