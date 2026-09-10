@@ -123,6 +123,7 @@ from .const import (
     get_naviclim_fan_modes,
 )
 from .tydom.MessageHandler import device_name, groups_data
+from .official_association_tutorials import get_association_illustration_data_url
 
 
 _BINARY_TRUE_VALUES = frozenset({"1", "on", "true", "yes"})
@@ -6962,7 +6963,7 @@ class HAGatewayAssociationGuideButton(_GatewayAssociationEntity, ButtonEntity):
         if illustrations:
             visuals = "\n\n".join(
                 f"![Illustration officielle de l'étape {index}]"
-                f"(/api/deltadore_tydom/association-guide/{image_id}.svg)"
+                f"({get_association_illustration_data_url(image_id)})"
                 for index, image_id in enumerate(illustrations, start=1)
             )
             steps = f"{steps}\n\n## Illustrations officielles\n\n{visuals}"

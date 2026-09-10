@@ -446,3 +446,12 @@ def get_association_illustration_svg(image_id: str) -> str | None:
         'role="img" aria-label="Illustration officielle Delta Dore">'
         f"{''.join(paths)}</svg>"
     )
+
+
+def get_association_illustration_data_url(image_id: str) -> str | None:
+    """Return an inline SVG URL usable by a Markdown notification."""
+    svg = get_association_illustration_svg(image_id)
+    if svg is None:
+        return None
+    encoded_svg = base64.b64encode(svg.encode("utf-8")).decode("ascii")
+    return f"data:image/svg+xml;base64,{encoded_svg}"
