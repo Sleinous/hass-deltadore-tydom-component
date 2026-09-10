@@ -197,6 +197,7 @@ class GatewayAssociationTests(IsolatedAsyncioTestCase):
             association_illustration_layout=(
                 None,
                 ("catalog_switch_tyxia2600_btna_step1",),
+                False,
             ),
         )
         button = object.__new__(HAGatewayAssociationGuideButton)
@@ -215,12 +216,29 @@ class GatewayAssociationTests(IsolatedAsyncioTestCase):
 
     def test_tymoov_radio_separates_overview_from_each_official_step(self) -> None:
         """Avoid presenting product and step visuals as an unexplained gallery."""
-        overview, steps = get_association_illustration_layout("25_tymoov")
+        overview, steps, stepwise = get_association_illustration_layout("25_tymoov")
 
         self.assertEqual(overview, "catalog_25_tymoov")
+        self.assertTrue(stepwise)
         self.assertEqual(
             steps,
             ("catalog_25_tymoov_tuto1", "catalog_25_tymoov_tuto2"),
+        )
+
+    def test_shared_tyxia_series_guide_omits_its_generic_catalogue_thumbnail(self) -> None:
+        """Do not imply that a generic series picture identifies a selected model."""
+        overview, steps, stepwise = get_association_illustration_layout(
+            "7_Tyxia_serie4000"
+        )
+
+        self.assertIsNone(overview)
+        self.assertTrue(stepwise)
+        self.assertEqual(
+            steps,
+            (
+                "catalog_7_tyxia_serie4000_tuto1",
+                "catalog_7_tyxia_serie4000_tuto2",
+            ),
         )
 
     def test_groupable_product_is_hidden_on_an_unsupported_gateway(self) -> None:
