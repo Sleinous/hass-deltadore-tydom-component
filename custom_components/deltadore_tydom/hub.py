@@ -93,6 +93,7 @@ from .ha_entities import (
 )
 
 from .const import DOMAIN, LOGGER, STRUCTURED_LOGGER, get_polling_interval_for_validity
+from .official_association_tutorials import OFFICIAL_ASSOCIATION_TUTORIALS
 from .remote_registry_migration import migrate_legacy_remote_endpoint
 
 
@@ -1757,18 +1758,29 @@ class Hub:
     def association_instructions(self) -> tuple[str, ...]:
         """Return the app-derived procedure for the selected product/channel."""
         product = self._selected_groupable_product()
-        if product is None:
-            return ()
-        channel = self._association_channel
-        button = channel.removeprefix("Bouton ").removeprefix("Touche ")
-        return tuple(
-            step.format(
-                channel=channel,
-                button=button,
-                channel_lower=channel.lower(),
+        if product is not None:
+            channel = self._association_channel
+            button = channel.removeprefix("Bouton ").removeprefix("Touche ")
+            return tuple(
+                step.format(
+                    channel=channel,
+                    button=button,
+                    channel_lower=channel.lower(),
+                )
+                for step in product.guide
             )
-            for step in product.guide
-        )
+
+        tutorial = OFFICIAL_ASSOCIATION_TUTORIALS.get(self._association_product, ())
+        instructions = []
+        for index, step in enumerate(tutorial, start=1):
+            text = " ".join(step.text.split())
+            if step.starts_gateway_listening:
+                text = (
+                    f"{text} Dans Home Assistant, appuyez alors sur "
+                    "« Lancer l'écoute de la passerelle »."
+                )
+            instructions.append(f"{index}. {text}")
+        return tuple(instructions)
 
     def _association_gateway_reference(self) -> str | None:
         """Return the gateway main reference when it has been discovered."""

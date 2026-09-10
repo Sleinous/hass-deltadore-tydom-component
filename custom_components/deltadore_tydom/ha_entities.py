@@ -6918,7 +6918,9 @@ class HAGatewayAssociationGuideButton(_GatewayAssociationEntity, ButtonEntity):
     async def async_press(self) -> None:
         """Create one updateable notification with the selected procedure."""
         channel = self._hub.association_channel_label
-        title = f"{self._hub.association_product_label} — association {channel}"
+        title = f"{self._hub.association_product_label} — guide d'association"
+        if channel:
+            title = f"{title} ({channel})"
         steps = "\n\n".join(self._hub.association_instructions)
         persistent_notification.async_create(
             self.hass,
