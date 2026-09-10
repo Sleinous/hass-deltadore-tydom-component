@@ -69,7 +69,11 @@ class DeltaDoreAssociationGuideDialog extends HTMLElement {
         figure { margin: 0 0 20px; text-align: center; }
         .overview { border-bottom: 1px solid var(--divider-color, #ddd); margin: 0 0 20px; padding-bottom: 16px; }
         .step-illustration { margin: 12px 0 0; }
-        img { display: block; height: auto; margin: 0 auto; max-width: 100%; }
+        img {
+          background: #344457; border-radius: 12px; box-sizing: border-box; display: block;
+          height: auto; margin: 0 auto; max-height: min(52vh, 480px); max-width: 100%;
+          padding: 20px;
+        }
         figcaption { color: var(--secondary-text-color, #666); font-size: 13px; margin-top: 6px; }
       </style>
       <div class="backdrop" role="presentation">
