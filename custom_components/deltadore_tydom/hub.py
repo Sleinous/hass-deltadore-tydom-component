@@ -15,6 +15,7 @@ from aiohttp import ClientWebSocketResponse, ClientSession
 from homeassistant.components.binary_sensor import BinarySensorEntity
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers import device_registry as dr
 from .tydom.tydom_client import TydomClient
 from .tydom.tydom_devices import (
     Tydom,
@@ -2706,6 +2707,7 @@ class Hub:
         if channel != expected_channel:
             raise ValueError(f"This {product.label} association is no longer pending")
         name = await configure_groupable_product(device, product, channel)
+        self._rename_new_groupable_device(device, name, product.label)
         self._pending_groupable_association = None
         self._pending_groupable_known_device_ids.clear()
         self._pending_groupable_candidate_device_id = None
@@ -2713,6 +2715,29 @@ class Hub:
         self._pending_groupable_auto_finalize_task = None
         LOGGER.info("Configured %s %s as %s", product.label, channel, name)
         await self.reload_devices()
+
+    def _rename_new_groupable_device(
+        self,
+        device: TydomRemoteControl | TydomInterrupter,
+        name: str,
+        model: str,
+    ) -> None:
+        """Replace the transient radio-discovery name in HA's device registry.
+
+        A fresh X3D device necessarily arrives before its related-endpoint
+        configuration.  Keep a user-created name intact, but replace only the
+        temporary ``X3D remote control <id>`` label with the already known
+        product name as soon as configuration succeeds.
+        """
+        registry = dr.async_get(self._hass)
+        entry = registry.async_get_device(
+            identifiers={(DOMAIN, device.registry_device_id)}
+        )
+        if entry is None:
+            return
+        if entry.name is not None and not entry.name.startswith("X3D remote control "):
+            return
+        registry.async_update_device(entry.id, name=name, model=model)
 
     async def ping(self) -> None:
         """Periodically send pings."""

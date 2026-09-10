@@ -269,6 +269,24 @@ class GatewayAssociationTests(IsolatedAsyncioTestCase):
             device, "Bouton A"
         )
 
+    def test_completed_tyxia_replaces_its_temporary_radio_name(self) -> None:
+        """The device page must never retain the discovery-only X3D label."""
+        tydom_hub = object.__new__(Hub)
+        tydom_hub._hass = MagicMock()
+        device = SimpleNamespace(registry_device_id="new-tyxia")
+        entry = SimpleNamespace(id="device-registry-id", name="X3D remote control 42")
+        registry = MagicMock()
+        registry.async_get_device.return_value = entry
+
+        with patch("custom_components.deltadore_tydom.hub.dr.async_get", return_value=registry):
+            tydom_hub._rename_new_groupable_device(
+                device, "Interrupteur 1", "TYXIA 2600"
+            )
+
+        registry.async_update_device.assert_called_once_with(
+            "device-registry-id", name="Interrupteur 1", model="TYXIA 2600"
+        )
+
     async def test_guide_button_opens_the_frontend_dialog(self) -> None:
         """The guide control sends structured data instead of a notification."""
         bus = MagicMock()
