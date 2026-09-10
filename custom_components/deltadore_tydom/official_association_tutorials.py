@@ -3832,15 +3832,27 @@ _COMPRESSED_COMPLEX_ILLUSTRATIONS: Final = (
 
 _ANDROID_NAMESPACE: Final = "{http://schemas.android.com/apk/res/android}"
 _COLOURS: Final = {
+    # Exact palette from the TYDOM Android application's resources.  The
+    # illustrations are Android Vector Drawables, whose @color references do
+    # not mean anything to a browser unless they are resolved here.
+    "@color/brandPrimary": "#24ad8d",
+    "@color/brandDark": "#354254",
+    "@color/brandSecondary": "#f9d837",
+    "@color/statusErrorDark": "#da483d",
+    "@color/statusError": "#fa7268",
+    "@color/statusInfo": "#009bc3",
+    "@color/statusSuccess": "#24ad8d",
+    "@color/statusWarning": "#ff9473",
     "@color/uiLight": "#ffffff",
-    "@color/uiGray20": "#d6dde5",
-    "@color/uiGray40": "#8a98a8",
-    "@color/uiGray60": "#637386",
-    "@color/uiGray80": "#536377",
-    "@color/brandDark": "#344457",
-    "@color/brandSecondary": "#2ab897",
-    "@color/statusError": "#ef625f",
-    "@color/statusWarning": "#f5b942",
+    "@color/uiGray5": "#f5f5f6",
+    "@color/uiGray10": "#eaeced",
+    "@color/uiGray20": "#d7d9dd",
+    "@color/uiGray30": "#c2c6cb",
+    "@color/uiGray40": "#aeb3bb",
+    "@color/uiGray50": "#9aa0a9",
+    "@color/uiGray60": "#868e98",
+    "@color/uiGray80": "#5d6876",
+    "@color/uiGray90": "#495465",
 }
 
 
@@ -3949,6 +3961,10 @@ def get_association_illustration_svg(image_id: str) -> str | None:
         ]
         if stroke != "none" and (width := _android_attr(path, "strokeWidth")):
             attributes.append(f'stroke-width="{escape(width)}"')
+        if fill != "none" and (alpha := _android_attr(path, "fillAlpha")):
+            attributes.append(f'fill-opacity="{escape(alpha)}"')
+        if stroke != "none" and (alpha := _android_attr(path, "strokeAlpha")):
+            attributes.append(f'stroke-opacity="{escape(alpha)}"')
         if fill_type := _android_attr(path, "fillType"):
             attributes.append(
                 'fill-rule="evenodd"' if fill_type == "evenOdd" else 'fill-rule="nonzero"'

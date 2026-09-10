@@ -22,6 +22,9 @@ from custom_components.deltadore_tydom.ha_entities import (
 )
 from custom_components.deltadore_tydom.official_association_tutorials import (
     OFFICIAL_ASSOCIATION_TUTORIALS,
+    _COMPLEX_ILLUSTRATION_VECTORS,
+    _EXACT_STANDARD_ILLUSTRATION_VECTORS,
+    _STANDARD_ILLUSTRATION_VECTORS,
     get_association_illustration_data_url,
     get_association_illustration_layout,
     get_association_illustration_svg,
@@ -199,6 +202,26 @@ class GatewayAssociationTests(IsolatedAsyncioTestCase):
         inline_image = get_association_illustration_data_url(illustrations[0])
         self.assertIsNotNone(inline_image)
         self.assertTrue(inline_image.startswith("data:image/svg+xml;base64,"))
+
+    def test_all_official_vector_colours_are_resolved_for_browsers(self) -> None:
+        """Never let an Android @color reference render black in HA."""
+        image_ids = set(_COMPLEX_ILLUSTRATION_VECTORS)
+        image_ids.update(_STANDARD_ILLUSTRATION_VECTORS)
+        image_ids.update(_EXACT_STANDARD_ILLUSTRATION_VECTORS)
+
+        for image_id in image_ids:
+            svg = get_association_illustration_svg(image_id)
+            self.assertIsNotNone(svg, image_id)
+            self.assertNotIn("@color/", svg, image_id)
+
+        tyxia_5610_step_2 = get_association_illustration_svg(
+            "catalog_7_tyxia_serie4000_tuto2"
+        )
+        self.assertIn('fill="#da483d"', tyxia_5610_step_2)
+        transparent_step = get_association_illustration_svg(
+            "catalog_rcu_tl2000_btn1_step3"
+        )
+        self.assertIn('fill-opacity="0.5"', transparent_step)
 
     async def test_guide_button_opens_the_frontend_dialog(self) -> None:
         """The guide control sends structured data instead of a notification."""
