@@ -85,7 +85,7 @@ class DeltaDoreAssociationGuideDialog extends HTMLElement {
             </figure>
             <ol class="instructions"></ol>
             <section class="illustrations" hidden>
-              <h3>Illustrations officielles</h3>
+              <h3></h3>
               <div class="images"></div>
             </section>
           </main>
@@ -128,17 +128,27 @@ class DeltaDoreAssociationGuideDialog extends HTMLElement {
       instructionList.append(item);
     });
 
-    if (this._illustrationMode !== "steps" && this._illustrations?.length) {
+    const remainingIllustrations = this._illustrationMode === "steps"
+      ? (this._illustrations || []).slice((this._instructions || []).length)
+      : (this._illustrations || []);
+    if (remainingIllustrations.length) {
       const section = this.shadowRoot.querySelector(".illustrations");
+      const sectionTitle = section.querySelector("h3");
       const images = this.shadowRoot.querySelector(".images");
+      sectionTitle.textContent = this._illustrationMode === "steps"
+        ? "Illustrations officielles complémentaires"
+        : "Illustrations officielles";
       section.hidden = false;
-      this._illustrations.forEach((source, index) => {
+      remainingIllustrations.forEach((source, index) => {
         const figure = document.createElement("figure");
         const image = document.createElement("img");
         image.src = source;
-        image.alt = `Illustration officielle de l'étape ${index + 1}`;
+        const stepNumber = this._illustrationMode === "steps"
+          ? (this._instructions || []).length + index + 1
+          : index + 1;
+        image.alt = `Illustration officielle de l'étape ${stepNumber}`;
         const caption = document.createElement("figcaption");
-        caption.textContent = `Étape ${index + 1}`;
+        caption.textContent = `Étape ${stepNumber}`;
         figure.append(image, caption);
         images.append(figure);
       });
