@@ -1780,7 +1780,9 @@ class Hub:
         )
 
     @property
-    def association_illustration_layout(self) -> tuple[str | None, tuple[str, ...]]:
+    def association_illustration_layout(
+        self,
+    ) -> tuple[str | None, tuple[str, ...], bool]:
         """Return a product overview separately from its instructional visuals."""
         product = self._selected_groupable_product()
         if product is None:
