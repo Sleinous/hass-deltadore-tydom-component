@@ -171,16 +171,6 @@ def _load_tutorial_catalog() -> tuple[
     OFFICIAL_ASSOCIATION_TUTORIAL_IDS,
 ) = _load_tutorial_catalog()
 
-_OFFICIAL_SHARED_TUTORIAL_IDS: Final = frozenset(
-    tutorial_id
-    for tutorial_id in OFFICIAL_ASSOCIATION_TUTORIAL_IDS.values()
-    if sum(
-        mapped_tutorial_id == tutorial_id
-        for mapped_tutorial_id in OFFICIAL_ASSOCIATION_TUTORIAL_IDS.values()
-    ) > 1
-)
-
-
 def get_official_association_tutorial_id(product: str | None) -> str | None:
     """Return the official tutorial identifier selected for a product."""
     if product is None:
@@ -3878,8 +3868,9 @@ def get_association_illustration_layout(
     """Return the official product overview and ordered instructional visuals.
 
     Standard TYDOM tutorials distinguish the catalogue picture of a product from
-    the illustrations that belong to each physical step. Keep that distinction
-    so the frontend can place a visual next to the instruction it explains.
+    the illustrations that belong to each physical step. The catalogue thumbnail
+    is intentionally omitted: it does not explain a physical action and can be
+    misleading for both individual products and shared product series.
     Complex channel-specific tutorials retain their existing gallery.
     """
     if tutorial_id is None:
@@ -3889,13 +3880,10 @@ def get_association_illustration_layout(
     illustrations = _EXACT_STANDARD_TUTORIAL_ILLUSTRATIONS.get(tutorial_id, ())
     if not illustrations:
         return None, (), False
-    # The first image is a catalogue thumbnail. It is useful for a product with
-    # its own tutorial, but misleading for a tutorial shared by a whole series
-    # (for example TYXIA 4600/4610/5731). Keep only the physical step visuals.
-    overview = (
-        None if tutorial_id in _OFFICIAL_SHARED_TUTORIAL_IDS else illustrations[0]
-    )
-    return overview, illustrations[1:], True
+    # The first image is a catalogue thumbnail, not an instructional visual.
+    # Keep only the physical step visuals, regardless of whether a tutorial is
+    # specific to a product or shared by a product series.
+    return None, illustrations[1:], True
 
 
 def get_association_illustration_ids(tutorial_id: str | None) -> tuple[str, ...]:
