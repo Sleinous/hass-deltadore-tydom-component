@@ -19,6 +19,7 @@ from custom_components.deltadore_tydom.ha_entities import HADeviceRemovalButton
 from custom_components.deltadore_tydom.hub import Hub
 from custom_components.deltadore_tydom.official_association_tutorials import (
     OFFICIAL_ASSOCIATION_TUTORIALS,
+    get_association_illustration_data_url,
     get_association_illustration_svg,
 )
 from custom_components.deltadore_tydom.const import DOMAIN
@@ -191,6 +192,9 @@ class GatewayAssociationTests(IsolatedAsyncioTestCase):
         self.assertIsNotNone(svg)
         self.assertIn("<svg", svg)
         self.assertIn("<path", svg)
+        inline_image = get_association_illustration_data_url(illustrations[0])
+        self.assertIsNotNone(inline_image)
+        self.assertTrue(inline_image.startswith("data:image/svg+xml;base64,"))
 
     def test_groupable_product_is_hidden_on_an_unsupported_gateway(self) -> None:
         """Do not expose a stale multi-channel flow on TYDOM 1/2 or Hub Tyxal+."""
