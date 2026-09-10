@@ -6922,6 +6922,14 @@ class HAGatewayAssociationGuideButton(_GatewayAssociationEntity, ButtonEntity):
         if channel:
             title = f"{title} ({channel})"
         steps = "\n\n".join(self._hub.association_instructions)
+        illustrations = self._hub.association_illustration_ids
+        if illustrations:
+            visuals = "\n\n".join(
+                f"![Illustration officielle de l'étape {index}]"
+                f"(/api/deltadore_tydom/association-guide/{image_id}.svg)"
+                for index, image_id in enumerate(illustrations, start=1)
+            )
+            steps = f"{steps}\n\n## Illustrations officielles\n\n{visuals}"
         persistent_notification.async_create(
             self.hass,
             steps,

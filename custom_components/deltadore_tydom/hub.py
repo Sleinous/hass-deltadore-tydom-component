@@ -93,7 +93,10 @@ from .ha_entities import (
 )
 
 from .const import DOMAIN, LOGGER, STRUCTURED_LOGGER, get_polling_interval_for_validity
-from .official_association_tutorials import OFFICIAL_ASSOCIATION_TUTORIALS
+from .official_association_tutorials import (
+    OFFICIAL_ASSOCIATION_TUTORIALS,
+    get_association_illustration_ids,
+)
 from .remote_registry_migration import migrate_legacy_remote_endpoint
 
 
@@ -1753,6 +1756,24 @@ class Hub:
         if not self.association_channel_labels:
             return None
         return self._association_channel
+
+    @property
+    def association_illustration_ids(self) -> tuple[str, ...]:
+        """Return official visual steps for the selected physical channel."""
+        product = self._selected_groupable_product()
+        if product is None:
+            return ()
+        channel = next(
+            (
+                item
+                for item in product.channels
+                if item.label == self._association_channel
+            ),
+            None,
+        )
+        return get_association_illustration_ids(
+            channel.tutorial_id if channel is not None else None
+        )
 
     @property
     def association_instructions(self) -> tuple[str, ...]:
