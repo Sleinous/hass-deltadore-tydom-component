@@ -171,6 +171,11 @@ def _load_tutorial_catalog() -> tuple[
     OFFICIAL_ASSOCIATION_TUTORIAL_IDS,
 ) = _load_tutorial_catalog()
 
+# These resources are catalogue illustrations rather than useful association
+# directions. In particular, the shared TYXIA 4000-series vector merely shows
+# a screwdriver and is not actionable for TYXIA 4600/4610/5731 users.
+_NON_INSTRUCTIONAL_TUTORIAL_VISUALS: Final = frozenset({"7_Tyxia_serie4000"})
+
 def get_official_association_tutorial_id(product: str | None) -> str | None:
     """Return the official tutorial identifier selected for a product."""
     if product is None:
@@ -3877,6 +3882,8 @@ def get_association_illustration_layout(
         return None, (), False
     if tutorial_id in _COMPLEX_TUTORIAL_ILLUSTRATIONS:
         return None, _COMPLEX_TUTORIAL_ILLUSTRATIONS[tutorial_id], False
+    if tutorial_id in _NON_INSTRUCTIONAL_TUTORIAL_VISUALS:
+        return None, (), True
     illustrations = _EXACT_STANDARD_TUTORIAL_ILLUSTRATIONS.get(tutorial_id, ())
     if not illustrations:
         return None, (), False
