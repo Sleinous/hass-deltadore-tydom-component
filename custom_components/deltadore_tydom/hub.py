@@ -1529,6 +1529,8 @@ class Hub:
         self._pending_groupable_candidate_device_id: str | None = None
         self._pending_groupable_auto_finalize_task: asyncio.Task[None] | None = None
         self._pending_groupable_auto_finalize_failed = False
+        self._pending_association_name: str | None = None
+        self._pending_association_known_device_ids: set[str] = set()
         self._refresh_energy_buttons_created: set[str] = set()
         self._device_association_buttons_created: set[tuple[str, str]] = set()
         self._remote_battery_entities: dict[str, HARemoteBattery] = {}
@@ -1794,8 +1796,8 @@ class Hub:
 
     @property
     def association_name_supported(self) -> bool:
-        """Whether the selected product is a named, groupable product."""
-        return self._selected_groupable_product() is not None
+        """Whether the selected product can be associated by this gateway."""
+        return self.association_product_supported
 
     @property
     def association_illustration_ids(self) -> tuple[str, ...]:
@@ -2016,6 +2018,8 @@ class Hub:
                 f"{configured_product.label} is not supported by this TYDOM gateway"
             )
         product = self._selected_groupable_product()
+        self._pending_association_name = self._association_name or None
+        self._pending_association_known_device_ids = set(self.devices)
         if product is not None:
             # Snapshot before the LAN request: the receive loop may discover
             # the product immediately after the gateway accepts it.
@@ -2024,6 +2028,7 @@ class Hub:
             payload = await start_product_association(self, self._association_profile)
         except Exception:
             self._pending_groupable_known_device_ids.clear()
+            self._clear_pending_association_name()
             raise
         if product is not None:
             self._pending_groupable_association = (product, self._association_channel)
@@ -2618,6 +2623,8 @@ class Hub:
         if isinstance(device, (TydomScene, TydomMoment, TydomGroup)):
             return
 
+        self._maybe_apply_pending_association_name(device)
+
         buttons = []
         finalization_key = (device.device_id, "finalize_groupable_product")
         pending_association = self._pending_groupable_association
@@ -2743,6 +2750,7 @@ class Hub:
         self._rename_new_groupable_device(device, name, product.label)
         self._pending_groupable_association = None
         self._pending_groupable_name = None
+        self._clear_pending_association_name()
         self._pending_groupable_known_device_ids.clear()
         self._pending_groupable_candidate_device_id = None
         self._pending_groupable_auto_finalize_failed = False
@@ -2772,6 +2780,43 @@ class Hub:
         if entry.name is not None and not entry.name.startswith("X3D remote control "):
             return
         registry.async_update_device(entry.id, name=name, model=model)
+
+    def _maybe_apply_pending_association_name(self, device: TydomDevice) -> None:
+        """Name one newly discovered non-groupable product in Home Assistant.
+
+        Groupable products are named during their own configuration transaction,
+        because that also writes their TYDOM related-endpoint group. Other
+        product formats are managed by the gateway, so only update HA's device
+        registry here rather than risk altering an unknown TYDOM document.
+        """
+        if (
+            self._pending_groupable_association is not None
+            or self._selected_groupable_product() is not None
+        ):
+            return
+        name = self._pending_association_name
+        if (
+            not name
+            or device.device_id in self._pending_association_known_device_ids
+        ):
+            return
+        registry = dr.async_get(self._hass)
+        entry = registry.async_get_device(
+            identifiers={(DOMAIN, device.registry_device_id)}
+        )
+        if entry is None:
+            return
+        discovered_name = device.device_name
+        if entry.name is None or entry.name in {
+            discovered_name,
+        } or entry.name.startswith("X3D remote control "):
+            registry.async_update_device(entry.id, name=name)
+        self._clear_pending_association_name()
+
+    def _clear_pending_association_name(self) -> None:
+        """Forget the association-name request once it has been handled."""
+        self._pending_association_name = None
+        self._pending_association_known_device_ids.clear()
 
     async def ping(self) -> None:
         """Periodically send pings."""
