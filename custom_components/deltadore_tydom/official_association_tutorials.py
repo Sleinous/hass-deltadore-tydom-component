@@ -171,10 +171,12 @@ def _load_tutorial_catalog() -> tuple[
     OFFICIAL_ASSOCIATION_TUTORIAL_IDS,
 ) = _load_tutorial_catalog()
 
-# These resources are catalogue illustrations rather than useful association
-# directions. In particular, the shared TYXIA 4000-series vector merely shows
-# a screwdriver and is not actionable for TYXIA 4600/4610/5731 users.
-_NON_INSTRUCTIONAL_TUTORIAL_VISUALS: Final = frozenset({"7_Tyxia_serie4000"})
+# These three products use the shared TYXIA 4000 catalogue tutorial, whose
+# vectors show a screwdriver/cabling rather than an association gesture. Do
+# not apply this exception to the other products that happen to share its ID.
+_NON_INSTRUCTIONAL_PRODUCT_VISUALS: Final = frozenset(
+    {"TYXIA 4600", "TYXIA 4610", "TYXIA 4620"}
+)
 
 def get_official_association_tutorial_id(product: str | None) -> str | None:
     """Return the official tutorial identifier selected for a product."""
@@ -3868,7 +3870,7 @@ _COMPLEX_TUTORIAL_ILLUSTRATIONS, _COMPLEX_ILLUSTRATION_VECTORS = (
 
 
 def get_association_illustration_layout(
-    tutorial_id: str | None,
+    tutorial_id: str | None, *, product: str | None = None
 ) -> tuple[str | None, tuple[str, ...], bool]:
     """Return the official product overview and ordered instructional visuals.
 
@@ -3882,7 +3884,7 @@ def get_association_illustration_layout(
         return None, (), False
     if tutorial_id in _COMPLEX_TUTORIAL_ILLUSTRATIONS:
         return None, _COMPLEX_TUTORIAL_ILLUSTRATIONS[tutorial_id], False
-    if tutorial_id in _NON_INSTRUCTIONAL_TUTORIAL_VISUALS:
+    if product in _NON_INSTRUCTIONAL_PRODUCT_VISUALS:
         return None, (), True
     illustrations = _EXACT_STANDARD_TUTORIAL_ILLUSTRATIONS.get(tutorial_id, ())
     if not illustrations:
@@ -3927,10 +3929,10 @@ def get_association_illustration_svg(image_id: str) -> str | None:
     if vector is None:
         return None
 
-    from xml.etree import ElementTree
+    from xml.etree import ElementTree as ET
     from xml.sax.saxutils import escape
 
-    root = ElementTree.fromstring(vector)
+    root = ET.fromstring(vector)
     viewport_width = _android_attr(root, "viewportWidth")
     viewport_height = _android_attr(root, "viewportHeight")
     if not viewport_width or not viewport_height:
