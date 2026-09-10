@@ -19,6 +19,7 @@ from custom_components.deltadore_tydom.ha_entities import HADeviceRemovalButton
 from custom_components.deltadore_tydom.hub import Hub
 from custom_components.deltadore_tydom.official_association_tutorials import (
     OFFICIAL_ASSOCIATION_TUTORIALS,
+    get_association_illustration_svg,
 )
 from custom_components.deltadore_tydom.const import DOMAIN
 from custom_components.deltadore_tydom.tydom.tydom_devices import (
@@ -172,6 +173,24 @@ class GatewayAssociationTests(IsolatedAsyncioTestCase):
             "voie B (Bouton B)",
             tydom_hub.association_instructions[9],
         )
+
+    def test_tyxia_2600_exposes_its_official_visual_steps(self) -> None:
+        """Keep the selected channel linked to its app-provided illustrations."""
+        tydom_hub = object.__new__(Hub)
+        tydom_hub._association_controls = []
+        tydom_hub._association_category = "Interrupteurs"
+        tydom_hub._association_product = "TYXIA 2600"
+        tydom_hub._association_profile = "official:remote_X3D_direct"
+        tydom_hub._association_channel = "Bouton A"
+
+        illustrations = tydom_hub.association_illustration_ids
+
+        self.assertEqual(len(illustrations), 5)
+        self.assertEqual(illustrations[0], "catalog_switch_tyxia2600_btna_step1")
+        svg = get_association_illustration_svg(illustrations[0])
+        self.assertIsNotNone(svg)
+        self.assertIn("<svg", svg)
+        self.assertIn("<path", svg)
 
     def test_groupable_product_is_hidden_on_an_unsupported_gateway(self) -> None:
         """Do not expose a stale multi-channel flow on TYDOM 1/2 or Hub Tyxal+."""
