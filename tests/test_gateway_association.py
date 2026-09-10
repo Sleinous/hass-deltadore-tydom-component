@@ -281,6 +281,22 @@ class GatewayAssociationTests(IsolatedAsyncioTestCase):
         # the same hardware and only 130 unique models expose a local guide.
         self.assertGreaterEqual(len(OFFICIAL_ASSOCIATION_TUTORIALS), 130)
 
+    def test_official_tutorials_contain_no_utf8_latin1_mojibake(self) -> None:
+        """All app-derived French instructions must remain readable in HA."""
+        corrupted_markers = {"\u00c3", "\u00c2"}
+        corrupted_steps = [
+            step.text
+            for tutorial in OFFICIAL_ASSOCIATION_TUTORIALS.values()
+            for step in tutorial
+            if any(marker in step.text for marker in corrupted_markers)
+        ]
+
+        self.assertEqual(corrupted_steps, [])
+        self.assertIn(
+            "À l'aide de la télécommande.",
+            OFFICIAL_ASSOCIATION_TUTORIALS["TUBAUTO Procom 10-3"][0].text,
+        )
+
     def test_tyxia_5610_uses_its_official_physical_guide(self) -> None:
         """A standard product must expose its own guide, not a generic recipe."""
         tydom_hub = object.__new__(Hub)
