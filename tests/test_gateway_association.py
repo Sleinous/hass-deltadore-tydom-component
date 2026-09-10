@@ -2,7 +2,7 @@
 
 from types import SimpleNamespace
 from unittest import IsolatedAsyncioTestCase
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 from custom_components.deltadore_tydom.hub import (
     ASSOCIATION_CATALOG,
@@ -250,6 +250,24 @@ class GatewayAssociationTests(IsolatedAsyncioTestCase):
             instructions = get_official_association_tutorial(product, category)
             self.assertTrue(instructions, product)
             self.assertIn("illustr", instructions[0].text, product)
+
+    async def test_unambiguous_tyxia_channel_is_finalized_automatically(self) -> None:
+        """A selected TYXIA channel needs no second user action after discovery."""
+        tydom_hub = object.__new__(Hub)
+        device = SimpleNamespace(device_id="new-tyxia")
+        tydom_hub._pending_groupable_association = (MagicMock(), "Bouton A")
+        tydom_hub._pending_groupable_candidate_device_id = device.device_id
+        tydom_hub._pending_groupable_auto_finalize_failed = False
+        tydom_hub._finalize_groupable_product_association = AsyncMock()
+
+        with patch(
+            "custom_components.deltadore_tydom.hub.asyncio.sleep", new=AsyncMock()
+        ):
+            await tydom_hub._async_auto_finalize_groupable_product(device)
+
+        tydom_hub._finalize_groupable_product_association.assert_awaited_once_with(
+            device, "Bouton A"
+        )
 
     async def test_guide_button_opens_the_frontend_dialog(self) -> None:
         """The guide control sends structured data instead of a notification."""
