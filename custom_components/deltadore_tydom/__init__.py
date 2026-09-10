@@ -53,6 +53,7 @@ PLATFORMS: list[str] = [
     Platform.BUTTON,
     Platform.NUMBER,
     Platform.SELECT,
+    Platform.TEXT,
     Platform.EVENT,
 ]
 
