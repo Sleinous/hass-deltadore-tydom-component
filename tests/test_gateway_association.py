@@ -15,8 +15,11 @@ from custom_components.deltadore_tydom.hub import (
     remove_product_association,
     start_product_association,
 )
-from custom_components.deltadore_tydom.ha_entities import HADeviceRemovalButton
 from custom_components.deltadore_tydom.hub import Hub
+from custom_components.deltadore_tydom.ha_entities import (
+    HAGatewayAssociationGuideButton,
+    HADeviceRemovalButton,
+)
 from custom_components.deltadore_tydom.official_association_tutorials import (
     OFFICIAL_ASSOCIATION_TUTORIALS,
     get_association_illustration_data_url,
@@ -195,6 +198,30 @@ class GatewayAssociationTests(IsolatedAsyncioTestCase):
         inline_image = get_association_illustration_data_url(illustrations[0])
         self.assertIsNotNone(inline_image)
         self.assertTrue(inline_image.startswith("data:image/svg+xml;base64,"))
+
+    async def test_guide_button_opens_the_frontend_dialog(self) -> None:
+        """The guide control sends structured data instead of a notification."""
+        bus = MagicMock()
+        guide_hub = SimpleNamespace(
+            hub_id="gateway",
+            association_channel_label="Bouton A",
+            association_product_label="TYXIA 2600",
+            association_instructions=("1. Préparez le bouton A.",),
+            association_illustration_ids=("catalog_switch_tyxia2600_btna_step1",),
+        )
+        button = object.__new__(HAGatewayAssociationGuideButton)
+        button._hub = guide_hub
+        button._hass = SimpleNamespace(bus=bus)
+
+        await button.async_press()
+
+        bus.async_fire.assert_called_once()
+        event, payload = bus.async_fire.call_args.args
+        self.assertEqual(event, "deltadore_tydom_association_guide")
+        self.assertEqual(payload["title"], "TYXIA 2600 — guide d'association (Bouton A)")
+        self.assertEqual(payload["instructions"], ["1. Préparez le bouton A."])
+        self.assertEqual(len(payload["illustrations"]), 1)
+        self.assertTrue(payload["illustrations"][0].startswith("data:image/svg+xml"))
 
     def test_groupable_product_is_hidden_on_an_unsupported_gateway(self) -> None:
         """Do not expose a stale multi-channel flow on TYDOM 1/2 or Hub Tyxal+."""
