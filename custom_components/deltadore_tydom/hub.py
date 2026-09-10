@@ -1800,8 +1800,7 @@ class Hub:
         product = self._selected_groupable_product()
         if product is None:
             return get_association_illustration_layout(
-                get_official_association_tutorial_id(self._association_product),
-                product=self._association_product,
+                get_official_association_tutorial_id(self._association_product)
             )
         channel = next(
             (
