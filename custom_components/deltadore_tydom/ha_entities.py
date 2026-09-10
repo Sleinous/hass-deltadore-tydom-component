@@ -6922,9 +6922,15 @@ class HAGatewayAssociationGuideButton(_GatewayAssociationEntity, ButtonEntity):
         title = f"{self._hub.association_product_label} — guide d'association"
         if channel:
             title = f"{title} ({channel})"
+        overview_id, illustration_ids = self._hub.association_illustration_layout
+        overview = (
+            get_association_illustration_data_url(overview_id)
+            if overview_id is not None
+            else None
+        )
         illustrations = [
             image
-            for image_id in self._hub.association_illustration_ids
+            for image_id in illustration_ids
             if (image := get_association_illustration_data_url(image_id)) is not None
         ]
         self.hass.bus.async_fire(
@@ -6932,7 +6938,9 @@ class HAGatewayAssociationGuideButton(_GatewayAssociationEntity, ButtonEntity):
             {
                 "title": title,
                 "instructions": list(self._hub.association_instructions),
+                "overview": overview,
                 "illustrations": illustrations,
+                "illustration_mode": "steps" if overview is not None else "gallery",
             },
         )
 
