@@ -3,11 +3,12 @@
 from __future__ import annotations
 
 import asyncio
+from pathlib import Path
 
-from aiohttp import web
 import homeassistant.helpers.config_validation as cv
 import voluptuous as vol
-from homeassistant.components.http import HomeAssistantView
+from homeassistant.components.frontend import add_extra_js_url
+from homeassistant.components.http import StaticPathConfig
 from homeassistant.const import CONF_HOST, CONF_MAC, CONF_PIN, Platform
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
@@ -30,7 +31,6 @@ from .hub import (
     remove_product_association,
     start_product_association,
 )
-from .official_association_tutorials import get_association_illustration_svg
 
 # Config schema for hassfest validation
 CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
@@ -56,26 +56,25 @@ PLATFORMS: list[str] = [
     Platform.EVENT,
 ]
 
-
-class AssociationGuideIllustrationView(HomeAssistantView):
-    """Serve bundled official association illustrations to HA users."""
-
-    url = "/api/deltadore_tydom/association-guide/{image_id}.svg"
-    name = "api:deltadore_tydom:association_guide"
-    requires_auth = True
-
-    async def get(self, request, image_id: str):
-        """Return one safe, converted SVG illustration."""
-        svg = get_association_illustration_svg(image_id)
-        if svg is None:
-            raise web.HTTPNotFound()
-        return web.Response(text=svg, content_type="image/svg+xml")
+ASSOCIATION_GUIDE_FRONTEND_URL = f"/{DOMAIN}/frontend/association-guide.js"
+ASSOCIATION_GUIDE_FRONTEND_PATH = (
+    Path(__file__).parent / "frontend" / "association-guide.js"
+)
 
 
 async def async_setup(hass: HomeAssistant, config: dict) -> bool:
     """Set up the Delta Dore Tydom integration."""
 
-    hass.http.register_view(AssociationGuideIllustrationView())
+    await hass.http.async_register_static_paths(
+        [
+            StaticPathConfig(
+                ASSOCIATION_GUIDE_FRONTEND_URL,
+                str(ASSOCIATION_GUIDE_FRONTEND_PATH),
+                cache_headers=False,
+            )
+        ]
+    )
+    add_extra_js_url(hass, ASSOCIATION_GUIDE_FRONTEND_URL)
 
     def get_tydom_device(entity_id: str):
         """Return the TYDOM device represented by an integration entity."""

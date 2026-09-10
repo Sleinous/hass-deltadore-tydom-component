@@ -86,8 +86,6 @@ from homeassistant.components.button import ButtonEntity
 from homeassistant.components.number import NumberEntity
 from homeassistant.components.select import SelectEntity
 from homeassistant.components.event import EventDeviceClass, EventEntity
-from homeassistant.components import persistent_notification
-
 from .tydom.tydom_devices import (
     Tydom,
     TydomDevice,
@@ -124,6 +122,8 @@ from .const import (
 )
 from .tydom.MessageHandler import device_name, groups_data
 from .official_association_tutorials import get_association_illustration_data_url
+
+ASSOCIATION_GUIDE_EVENT = f"{DOMAIN}_association_guide"
 
 
 _BINARY_TRUE_VALUES = frozenset({"1", "on", "true", "yes"})
@@ -6917,25 +6917,23 @@ class HAGatewayAssociationGuideButton(_GatewayAssociationEntity, ButtonEntity):
         return bool(self._hub.association_instructions)
 
     async def async_press(self) -> None:
-        """Create one updateable notification with the selected procedure."""
+        """Open the selected procedure in the local HA guide dialog."""
         channel = self._hub.association_channel_label
         title = f"{self._hub.association_product_label} — guide d'association"
         if channel:
             title = f"{title} ({channel})"
-        steps = "\n\n".join(self._hub.association_instructions)
-        illustrations = self._hub.association_illustration_ids
-        if illustrations:
-            visuals = "\n\n".join(
-                f"![Illustration officielle de l'étape {index}]"
-                f"({get_association_illustration_data_url(image_id)})"
-                for index, image_id in enumerate(illustrations, start=1)
-            )
-            steps = f"{steps}\n\n## Illustrations officielles\n\n{visuals}"
-        persistent_notification.async_create(
-            self.hass,
-            steps,
-            title=title,
-            notification_id=f"{DOMAIN}_{self._hub.hub_id}_association_guide",
+        illustrations = [
+            image
+            for image_id in self._hub.association_illustration_ids
+            if (image := get_association_illustration_data_url(image_id)) is not None
+        ]
+        self.hass.bus.async_fire(
+            ASSOCIATION_GUIDE_EVENT,
+            {
+                "title": title,
+                "instructions": list(self._hub.association_instructions),
+                "illustrations": illustrations,
+            },
         )
 
 
