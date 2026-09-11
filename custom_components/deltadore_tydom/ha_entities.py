@@ -7007,9 +7007,7 @@ class HAGatewayAssociationGuideButton(_GatewayAssociationEntity, ButtonEntity):
                 "instructions": list(self._hub.association_instructions),
                 "overview": overview,
                 "illustrations": illustrations,
-                "illustration_mode": (
-                    "steps" if stepwise_illustrations else "gallery"
-                ),
+                "illustration_mode": ("steps" if stepwise_illustrations else "gallery"),
             },
         )
 
