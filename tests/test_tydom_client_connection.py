@@ -569,6 +569,20 @@ class TestManagedConnection(IsolatedAsyncioTestCase):
             body={"protocol": "X3D", "type": "x3d_rm", "profile": "light"},
         )
 
+    async def test_product_discovery_does_not_probe_the_devices_collection(self) -> None:
+        """The install action is sent directly, including on TYDOM 1."""
+        client = self._client()
+        client.get_reply_to_request = AsyncMock()
+        client.send_request = AsyncMock(return_value="request-1")
+        payload = {"protocol": "X3D", "type": "direct", "profile": "meter"}
+
+        await client.post_device_discovery(payload)
+
+        client.get_reply_to_request.assert_not_awaited()
+        client.send_request.assert_awaited_once_with(
+            "POST", "/devices/install", body=payload
+        )
+
     async def test_missing_optional_endpoints_are_not_retried(self) -> None:
         """A legacy gateway's 404 capabilities are remembered per session."""
         client = self._client()
