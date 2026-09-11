@@ -489,7 +489,8 @@ class GatewayAssociationTests(IsolatedAsyncioTestCase):
 
         instructions = tydom_hub.association_instructions
 
-        self.assertIn('« Associer ».', instructions[1])
+        self.assertIn("l'appareil est prêt à être associé.", instructions[1])
+        self.assertNotIn("Associer", instructions[1])
         self.assertNotIn('\\"', "\n".join(instructions))
 
     def test_tyxia_5610_uses_its_official_physical_guide(self) -> None:
