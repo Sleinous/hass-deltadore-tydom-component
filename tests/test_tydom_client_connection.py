@@ -362,34 +362,59 @@ class TestManagedConnection(IsolatedAsyncioTestCase):
             ],
         )
 
-    async def test_product_discovery_does_not_wait_for_gateway_reply(self) -> None:
+    async def test_product_discovery_tolerates_a_gateway_scan_timeout(self) -> None:
         """Discovery must not fail when a gateway keeps its radio scan open."""
         client = self._client()
-        client.send_request = AsyncMock(return_value="request-1")
+        client.get_reply_to_request = AsyncMock(
+            side_effect=TydomClientApiClientCommunicationError(
+                "Timeout waiting for reply to POST /devices/install"
+            )
+        )
 
         await client.post_device_discovery(
             {"protocol": "X3D", "type": "x3d_rm", "profile": "light"}
         )
 
-        client.send_request.assert_awaited_once_with(
+        client.get_reply_to_request.assert_awaited_once_with(
             "POST",
             "/devices/install",
             body={"protocol": "X3D", "type": "x3d_rm", "profile": "light"},
+            timeout=1,
+            log_timeout=False,
         )
 
-    async def test_product_discovery_does_not_probe_the_devices_collection(self) -> None:
-        """The install action is sent directly, including on TYDOM 1."""
+    async def test_product_discovery_falls_back_when_install_is_not_supported(
+        self,
+    ) -> None:
+        """A gateway uses the compatibility action only after install returns 404."""
         client = self._client()
+        client.get_reply_to_request = AsyncMock(
+            side_effect=TydomClientApiClientCommunicationError(
+                "Request POST /devices/install failed: HTTP 404"
+            )
+        )
+        client.send_request = AsyncMock(return_value="compatibility-request")
+        payload = {"protocol": "X3D", "type": "direct", "profile": "meter"}
+
+        await client.post_device_discovery(payload)
+
+        client.send_request.assert_awaited_once_with(
+            "POST", "/devices", body=payload
+        )
+        self.assertEqual(client._device_discovery_endpoint, "/devices")
+
+    async def test_product_discovery_remembers_the_compatibility_action(self) -> None:
+        """Once unsupported, do not probe the official route again this session."""
+        client = self._client()
+        client._device_discovery_endpoint = "/devices"
         client.get_reply_to_request = AsyncMock()
-        client.send_request = AsyncMock(return_value="request-1")
+        client.send_request = AsyncMock(return_value="compatibility-request")
         payload = {"protocol": "X3D", "type": "direct", "profile": "meter"}
 
         await client.post_device_discovery(payload)
 
         client.get_reply_to_request.assert_not_awaited()
-        client.send_request.assert_awaited_once_with(
-            "POST", "/devices/install", body=payload
-        )
+        client.send_request.assert_awaited_once_with("POST", "/devices", body=payload)
 
     async def test_missing_optional_endpoints_are_not_retried(self) -> None:
         """A legacy gateway's 404 capabilities are remembered per session."""
