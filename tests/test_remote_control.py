@@ -298,6 +298,35 @@ class TestRemoteControl(IsolatedAsyncioTestCase):
         self.assertIsInstance(devices[0], TydomEnergy)
         self.assertEqual(devices[0].device_name, f"X3D meter {device_id}")
 
+    async def test_unconfigured_x3d_meter_is_recovered_from_its_data(self) -> None:
+        """A previously associated Tywatt survives a later HA restart/reload."""
+        device_id = 1789146156
+        devices = await self.handler.parse_devices_data(
+            [
+                {
+                    "id": device_id,
+                    "endpoints": [
+                        {
+                            "id": device_id,
+                            "error": 0,
+                            "data": [
+                                {
+                                    "name": "energyIndexHeatGas",
+                                    "validity": "upToDate",
+                                    "value": 0,
+                                }
+                            ],
+                        }
+                    ],
+                }
+            ],
+            None,
+        )
+
+        self.assertEqual(len(devices), 1)
+        self.assertIsInstance(devices[0], TydomEnergy)
+        self.assertEqual(devices[0].energyIndexHeatGas, 0)
+
     async def test_unconfigured_x3d_temperature_is_exposed_from_access_event(
         self,
     ) -> None:
