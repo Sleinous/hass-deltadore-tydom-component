@@ -2679,7 +2679,11 @@ class Hub:
             )
         ):
             buttons.append(
-                HADeviceRemovalButton(device, self._hass, remove_product_association)
+                HADeviceRemovalButton(
+                    device,
+                    self._hass,
+                    self._remove_product_association_and_reload,
+                )
             )
             self._device_association_buttons_created.add(removal_key)
 
@@ -2694,6 +2698,11 @@ class Hub:
 
         if buttons:
             self.add_button_callback(buttons)
+
+    async def _remove_product_association_and_reload(self, device) -> None:
+        """Remove a product, then immediately rebuild the local inventory."""
+        await remove_product_association(device)
+        await self.reload_devices()
 
     async def _async_auto_finalize_groupable_product(
         self, device: TydomRemoteControl | TydomInterrupter
