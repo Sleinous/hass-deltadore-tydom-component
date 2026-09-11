@@ -36,7 +36,7 @@ Platform | Description
 -- | --
 `alarm_control_panel` | Controls a TYXAL alarm.
 `binary_sensor` | Reports binary states and diagnostics.
-`button` | Exposes stateless controls such as gate, garage door and alarm actions.
+`button` | Exposes stateless controls such as gate, garage door and alarm actions, plus cancellation of an active TRV Boost.
 `climate` | Controls heating, cooling and ventilation.
 `cover` | Controls shutters, blinds and awnings.
 `event` | Reports physical remote-control and wall-switch button presses.
@@ -63,6 +63,10 @@ Platform | Description
 - Keep Tywell wall-controller sensors, area-backed climate control and
   companion weather or shutter controls attached to the same physical device
   across the different endpoint layouts advertised by TYDOM.
+- Expose area-backed TRV 1.0 radiator thermostats as native `climate`
+  entities, with ambient and target temperature, heating/idle action and a
+  **Cancel Boost** button while a Boost is active. Cancelling Boost restores
+  the normal TYDOM schedule without changing its programmed setpoint.
 - Expose alarm modes and zones, event history and acknowledgement, the actor
   behind the latest alarm state change, supported remote maintenance and
   forced-arming operations, and native automation events from compatible wall
@@ -78,7 +82,7 @@ contributors; this is not an exhaustive compatibility list.
 Category | Confirmed hardware or configuration | Home Assistant support
 -- | -- | --
 Alarm and safety | TYXAL+, CS8000, CSX40 and DFR TYXAL+ smoke detectors | Alarm control, zone modes, diagnostics, smoke state, event history, acknowledgement and supported remote product/zone management.
-Climate and heating | Tybox 5101 with Typass ATL, Tywell Control, Tywell 2050, TYXIA 1137, Calybox and RF 6600 FP | Area-backed climate control, temperatures, heating and cooling setpoints, operating modes, humidity, battery and capability-driven heating or pilot-wire commands where advertised.
+Climate and heating | TRV 1.0 radiator thermostats, Tybox 5101 with Typass ATL, Tywell Control, Tywell 2050, TYXIA 1137, Calybox and RF 6600 FP | Area-backed climate control, temperatures, heating and cooling setpoints, operating modes, humidity, battery and capability-driven heating or pilot-wire commands where advertised. TRV 1.0 heads expose a native climate entity and an available-only-while-active **Cancel Boost** button.
 Energy monitoring | TYWATT 1000, TYWATT 2000 and TYWATT 5400 with EMIC | Power, current and energy measurements, including heating, domestic hot water and cooling channels where advertised.
 Gates and garage doors | TYXIA 4620 dry-contact receivers | Stateless toggle buttons matching the receiver's open/stop/close pulse sequence, without claiming unavailable position feedback.
 Lighting and switching | TYXIA 4910 fixed-output and TYXIA 4940 dimming receivers configured under TYDOM's `Others` usage, TYXIA 6610, Delta Dore Easy Plug and compatible X3D equipment | Lights, brightness, switches and plugs according to the capabilities reported by the endpoint.

@@ -38,7 +38,7 @@ Plateforme | Description
 -- | --
 `alarm_control_panel` | Pilote une alarme TYXAL.
 `binary_sensor` | Indique les états binaires et les diagnostics.
-`button` | Fournit des commandes sans état, notamment pour les portails, portes de garage et alarmes.
+`button` | Fournit des commandes sans état, notamment pour les portails, portes de garage et alarmes, ainsi que l’annulation d’un Boost TRV actif.
 `climate` | Pilote le chauffage, la climatisation et la ventilation.
 `cover` | Pilote les volets, stores et bannes.
 `event` | Signale les appuis sur les télécommandes et interrupteurs physiques.
@@ -66,6 +66,11 @@ Plateforme | Description
 - Conserve les capteurs du boîtier mural Tywell, la régulation par zone et les
   commandes météo ou volets associées sur le même appareil physique, quelle
   que soit la disposition des points de terminaison annoncée par TYDOM.
+- Expose les têtes thermostatiques de radiateur TRV 1.0 liées à une zone comme
+  entités `climate` natives, avec température ambiante, consigne, action
+  chauffage/inactif et bouton **Annuler le Boost** tant qu’un Boost est actif.
+  L’annulation du Boost rétablit le planning TYDOM normal sans modifier la
+  consigne programmée.
 - Expose les modes et zones d'alarme, l'historique et l'acquittement des
   événements, l'auteur de la dernière transition d'état, les opérations de
   maintenance à distance et d'armement forcé confirmées, ainsi que les
@@ -83,7 +88,7 @@ liste de compatibilité n'est pas exhaustive.
 Catégorie | Matériel ou configuration confirmés | Prise en charge dans Home Assistant
 -- | -- | --
 Alarme et sécurité | TYXAL+, CS8000, CSX40 et détecteurs de fumée DFR TYXAL+ | Pilotage de l'alarme, modes par zone, diagnostics, état de détection de fumée, historique et acquittement des événements, ainsi que la gestion à distance des produits et zones compatibles.
-Chauffage et régulation | Tybox 5101 avec Typass ATL, Tywell Control, Tywell 2050, TYXIA 1137, Calybox et RF 6600 FP | Régulation par zone, températures, consignes de chauffage et de refroidissement, modes de fonctionnement, humidité, batterie et commandes de chauffage ou de fil pilote annoncées par l'appareil.
+Chauffage et régulation | Têtes thermostatiques de radiateur TRV 1.0, Tybox 5101 avec Typass ATL, Tywell Control, Tywell 2050, TYXIA 1137, Calybox et RF 6600 FP | Régulation par zone, températures, consignes de chauffage et de refroidissement, modes de fonctionnement, humidité, batterie et commandes de chauffage ou de fil pilote annoncées par l'appareil. Les têtes TRV 1.0 exposent une entité `climate` native et un bouton **Annuler le Boost**, disponible uniquement pendant un Boost actif.
 Suivi énergétique | TYWATT 1000, TYWATT 2000 et TYWATT 5400 avec EMIC | Mesures de puissance, courant et énergie, y compris les canaux de chauffage, d'eau chaude sanitaire et de refroidissement lorsqu'ils sont annoncés.
 Portails et portes de garage | Récepteurs à contact sec TYXIA 4620 | Boutons impulsionnels reproduisant la séquence ouverture/arrêt/fermeture du récepteur, sans prétendre connaître une position qui n'est pas remontée.
 Éclairage et commutation | Récepteurs TYXIA 4910 à sortie fixe et TYXIA 4940 à variation configurés dans l'usage `Autres` de TYDOM, TYXIA 6610, Delta Dore Easy Plug et équipements X3D compatibles | Éclairages, luminosité, interrupteurs et prises selon les capacités annoncées par le point de terminaison.
