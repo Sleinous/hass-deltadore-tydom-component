@@ -1857,6 +1857,17 @@ class Hub:
             # They are already decoded at this point, so remove the remaining
             # literal escape marker before exposing the instruction in HA.
             text = " ".join(step.text.split()).replace('\\"', '"')
+            # "Associer" is the button shown by the official TYDOM app.  In
+            # Home Assistant the matching action is the gateway-listening
+            # button below, so do not instruct the user to look for an app
+            # control which is not present here.
+            if (
+                text.lower()
+                == 'la led rouge clignote, maintenant appuyez sur "associer".'
+            ):
+                text = (
+                    "Lorsque la LED rouge clignote, l'appareil est prêt à être associé."
+                )
             if step.starts_gateway_listening:
                 text = (
                     f"{text} Dans Home Assistant, appuyez alors sur "
