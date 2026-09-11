@@ -161,6 +161,29 @@ def _is_unconfigured_x3d_remote(uid: str, endpoint: dict[str, Any]) -> bool:
     )
 
 
+def _unconfigured_x3d_product(
+    endpoint: dict[str, Any], device_id: str | int
+) -> tuple[str, str] | None:
+    """Return a safe fallback type/name for a newly discovered X3D product.
+
+    Some older gateways announce a successful product association through
+    ``POST /devices/access`` before, or instead of, adding the product to
+    ``/configs/file``. The access event contains the radio profile, which is
+    enough to expose the two non-ambiguous products currently supported here.
+    Persisting the inferred mapping also lets the following ``/devices/meta``
+    and ``/devices/data`` events create the normal HA entities.
+    """
+    access = endpoint.get("access")
+    if not isinstance(access, dict) or access.get("protocol") != "X3D":
+        return None
+
+    profiles = {
+        "meter": ("conso", f"X3D meter {device_id}"),
+        "temperature": ("sensorThermo", f"X3D temperature sensor {device_id}"),
+    }
+    return profiles.get(access.get("profile"))
+
+
 # Device dict for parsing
 device_name = {}
 device_endpoint = {}
@@ -1509,6 +1532,27 @@ class MessageHandler:
                             endpoint_id,
                         )
 
+                    if (
+                        config_file_data is not None
+                        and (not name_of_id or not type_of_id)
+                        and (
+                            discovered_product := _unconfigured_x3d_product(
+                                endpoint, device_id
+                            )
+                        )
+                        is not None
+                    ):
+                        type_of_id, name_of_id = discovered_product
+                        device_name[unique_id] = name_of_id
+                        device_type[unique_id] = type_of_id
+                        LOGGER.info(
+                            "Discovered unconfigured X3D product "
+                            "(device_id=%s, endpoint_id=%s, profile=%s)",
+                            device_id,
+                            endpoint_id,
+                            endpoint["access"]["profile"],
+                        )
+
                     # Check if device is registered in configuration
                     if not name_of_id or name_of_id == "":
                         LOGGER.warning(
@@ -1552,6 +1596,7 @@ class MessageHandler:
                         and type_of_id != "conso"
                         and not device_metadata.get(unique_id)
                         and not endpoint.get("link")
+                        and _unconfigured_x3d_product(endpoint, device_id) is None
                     ):
                         LOGGER.debug(
                             "Ignoring empty endpoint placeholder "
