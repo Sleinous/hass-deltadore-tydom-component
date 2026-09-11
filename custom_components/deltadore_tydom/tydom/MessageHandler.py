@@ -170,18 +170,27 @@ def _unconfigured_x3d_product(
     ``POST /devices/access`` before, or instead of, adding the product to
     ``/configs/file``. The access event contains the radio profile, which is
     enough to expose the two non-ambiguous products currently supported here.
-    Persisting the inferred mapping also lets the following ``/devices/meta``
-    and ``/devices/data`` events create the normal HA entities.
+    A previously associated Tywatt has no later access event, but its
+    ``energyIndexHeatGas`` state is likewise unambiguous. Persisting the
+    inferred mapping lets the following ``/devices/meta`` and ``/devices/data``
+    events create the normal HA entities.
     """
     access = endpoint.get("access")
-    if not isinstance(access, dict) or access.get("protocol") != "X3D":
-        return None
-
     profiles = {
         "meter": ("conso", f"X3D meter {device_id}"),
         "temperature": ("sensorThermo", f"X3D temperature sensor {device_id}"),
     }
-    return profiles.get(access.get("profile"))
+    if isinstance(access, dict) and access.get("protocol") == "X3D":
+        return profiles.get(access.get("profile"))
+
+    data_names = {
+        item.get("name")
+        for item in endpoint.get("data", [])
+        if isinstance(item, dict) and isinstance(item.get("name"), str)
+    }
+    if "energyIndexHeatGas" in data_names:
+        return profiles["meter"]
+    return None
 
 
 # Device dict for parsing
@@ -1547,10 +1556,10 @@ class MessageHandler:
                         device_type[unique_id] = type_of_id
                         LOGGER.info(
                             "Discovered unconfigured X3D product "
-                            "(device_id=%s, endpoint_id=%s, profile=%s)",
+                            "(device_id=%s, endpoint_id=%s, type=%s)",
                             device_id,
                             endpoint_id,
-                            endpoint["access"]["profile"],
+                            type_of_id,
                         )
 
                     # Check if device is registered in configuration
