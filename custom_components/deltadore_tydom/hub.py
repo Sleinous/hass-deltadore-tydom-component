@@ -2663,9 +2663,10 @@ class Hub:
             if self._pending_groupable_auto_finalize_task is not None:
                 self._pending_groupable_auto_finalize_task.cancel()
                 self._pending_groupable_auto_finalize_task = None
-            if candidate_id is not None and (
-                candidate := self.devices.get(candidate_id)
-            ) is not None:
+            if (
+                candidate_id is not None
+                and (candidate := self.devices.get(candidate_id)) is not None
+            ):
                 self._maybe_create_device_association_buttons(candidate)
         if (
             finalization_key not in self._device_association_buttons_created
@@ -2804,10 +2805,7 @@ class Hub:
         ):
             return
         name = self._pending_association_name
-        if (
-            not name
-            or device.device_id in self._pending_association_known_device_ids
-        ):
+        if not name or device.device_id in self._pending_association_known_device_ids:
             return
         registry = dr.async_get(self._hass)
         entry = registry.async_get_device(
@@ -2816,9 +2814,14 @@ class Hub:
         if entry is None:
             return
         discovered_name = device.device_name
-        if entry.name is None or entry.name in {
-            discovered_name,
-        } or entry.name.startswith("X3D remote control "):
+        if (
+            entry.name is None
+            or entry.name
+            in {
+                discovered_name,
+            }
+            or entry.name.startswith("X3D remote control ")
+        ):
             registry.async_update_device(entry.id, name=name)
         self._clear_pending_association_name()
 
