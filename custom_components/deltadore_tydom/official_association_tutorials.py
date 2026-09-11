@@ -266,11 +266,15 @@ def get_official_association_tutorial_id(
     """Return the official tutorial selected for a product and usage."""
     if product is None:
         return None
-    if category is not None and (
-        tutorial_id := _CURRENT_CATALOGUE_CATEGORY_TUTORIAL_IDS.get(
-            (category, product)
+    if (
+        category is not None
+        and (
+            tutorial_id := _CURRENT_CATALOGUE_CATEGORY_TUTORIAL_IDS.get(
+                (category, product)
+            )
         )
-    ) is not None:
+        is not None
+    ):
         return tutorial_id
     return OFFICIAL_ASSOCIATION_TUTORIAL_IDS.get(
         product, _CURRENT_CATALOGUE_PRODUCT_TUTORIAL_IDS.get(product)
@@ -3035,9 +3039,7 @@ _COMPRESSED_STANDARD_ILLUSTRATIONS: Final = (
 )
 
 
-def _load_standard_illustrations() -> tuple[
-    dict[str, tuple[str, ...]], dict[str, str]
-]:
+def _load_standard_illustrations() -> tuple[dict[str, tuple[str, ...]], dict[str, str]]:
     """Decode official illustration sequences for standard products."""
     payload = json.loads(
         gzip.decompress(base64.b64decode(_COMPRESSED_STANDARD_ILLUSTRATIONS)).decode(
@@ -4253,7 +4255,9 @@ def get_association_illustration_svg(image_id: str) -> str | None:
             attributes.append(f'stroke-opacity="{escape(alpha)}"')
         if fill_type := _android_attr(path, "fillType"):
             attributes.append(
-                'fill-rule="evenodd"' if fill_type == "evenOdd" else 'fill-rule="nonzero"'
+                'fill-rule="evenodd"'
+                if fill_type == "evenOdd"
+                else 'fill-rule="nonzero"'
             )
         paths.append(f"<path {' '.join(attributes)}/>")
 
