@@ -1170,12 +1170,14 @@ class TydomClient:
     async def post_device_discovery(self, payload: dict[str, str | int]) -> None:
         """Start the gateway's generic product-discovery workflow.
 
-        The official application sends its ``DISCOVER`` request to
-        ``/devices``. Some gateway firmware keeps this request open while it
-        listens for a radio product and does not send a synchronous HTTP
-        reply. Dispatch it without waiting for such a reply; callers must
-        subsequently reload the inventory to determine whether a product was
-        discovered.
+        The official TYDOM application sends its standard ``DISCOVER``
+        request to ``/devices/install``.  ``/devices`` is a collection route,
+        not the install action: in particular TYDOM 1 firmware 03.15.31
+        rejects a POST to it with HTTP 404.  Some gateway firmware keeps the
+        install request open while it listens for a radio product and does not
+        send a synchronous HTTP reply. Dispatch it without waiting for such a
+        reply; callers must subsequently reload the inventory to determine
+        whether a product was discovered.
         """
         required = {"protocol", "type", "profile"}
         missing = required.difference(payload)
@@ -1183,7 +1185,9 @@ class TydomClient:
             raise ValueError(
                 "Product association payload is missing: " + ", ".join(sorted(missing))
             )
-        transaction_id = await self.send_request("POST", "/devices", body=payload)
+        transaction_id = await self.send_request(
+            "POST", "/devices/install", body=payload
+        )
         LOGGER.debug(
             "Dispatched product-association request (transaction_id: %s)",
             transaction_id,
