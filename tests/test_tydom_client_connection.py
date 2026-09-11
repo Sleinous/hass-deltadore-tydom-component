@@ -373,7 +373,7 @@ class TestManagedConnection(IsolatedAsyncioTestCase):
 
         client.send_request.assert_awaited_once_with(
             "POST",
-            "/devices",
+            "/devices/install",
             body={"protocol": "X3D", "type": "x3d_rm", "profile": "light"},
         )
 
