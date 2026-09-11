@@ -64,6 +64,8 @@ handler_spec.loader.exec_module(handler_module)
 
 MessageHandler = handler_module.MessageHandler
 TydomRemoteControl = devices_module.TydomRemoteControl
+TydomEnergy = devices_module.TydomEnergy
+TydomThermo = devices_module.TydomThermo
 
 migration_name = "custom_components.deltadore_tydom.remote_registry_migration"
 migration_path = (
@@ -268,6 +270,62 @@ class TestRemoteControl(IsolatedAsyncioTestCase):
         self.assertIsInstance(device, TydomRemoteControl)
         self.assertEqual(device.remote_name, f"X3D remote control {device_id}")
         self.assertEqual(device.button_number, 1)
+
+    async def test_unconfigured_x3d_meter_is_exposed_from_access_event(self) -> None:
+        """A Tywatt announced by /devices/access must not be discarded."""
+        device_id = 1789146156
+        devices = await self.handler.parse_devices_data(
+            [
+                {
+                    "id": device_id,
+                    "endpoints": [
+                        {
+                            "id": device_id,
+                            "error": 0,
+                            "access": {
+                                "protocol": "X3D",
+                                "type": "direct",
+                                "profile": "meter",
+                            },
+                        }
+                    ],
+                }
+            ],
+            None,
+        )
+
+        self.assertEqual(len(devices), 1)
+        self.assertIsInstance(devices[0], TydomEnergy)
+        self.assertEqual(devices[0].device_name, f"X3D meter {device_id}")
+
+    async def test_unconfigured_x3d_temperature_is_exposed_from_access_event(
+        self,
+    ) -> None:
+        """A STE 2000 announced by /devices/access gets a sensor fallback."""
+        device_id = 1789146157
+        devices = await self.handler.parse_devices_data(
+            [
+                {
+                    "id": device_id,
+                    "endpoints": [
+                        {
+                            "id": device_id,
+                            "error": 0,
+                            "access": {
+                                "protocol": "X3D",
+                                "type": "direct",
+                                "profile": "temperature",
+                            },
+                        }
+                    ],
+                }
+            ],
+            None,
+        )
+
+        self.assertEqual(len(devices), 1)
+        self.assertIsInstance(devices[0], TydomThermo)
+        self.assertEqual(devices[0].device_name, f"X3D temperature sensor {device_id}")
 
     async def test_tyxia_1410_has_four_button_endpoints(self) -> None:
         """TYXIA 1410 discovery exposes four buttons under one remote."""
