@@ -1066,6 +1066,23 @@ class GatewayAssociationTests(IsolatedAsyncioTestCase):
 
         self.assertEqual(calls, ["42"])
 
+    async def test_device_removal_from_its_page_reloads_the_gateway_inventory(
+        self,
+    ) -> None:
+        """A successful device-page removal must not require a manual reload."""
+        hub = object.__new__(Hub)
+        hub.reload_devices = AsyncMock()
+        device = SimpleNamespace(device_id="42")
+
+        with patch(
+            "custom_components.deltadore_tydom.hub.remove_product_association",
+            new=AsyncMock(),
+        ) as remove:
+            await hub._remove_product_association_and_reload(device)
+
+        remove.assert_awaited_once_with(device)
+        hub.reload_devices.assert_awaited_once_with()
+
     def test_interrupter_removal_button_is_grouped_with_its_switch(self) -> None:
         """The removal control belongs to the physical wall switch."""
         device = TydomInterrupter(
