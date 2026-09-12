@@ -120,7 +120,7 @@ class AssociationChoice:
 
     label: str
     profile_id: str | None
-    requires_tywell_pro: bool = False
+    unsupported_gateway_names: frozenset[str] = frozenset()
 
 
 @dataclass(frozen=True, slots=True)
@@ -927,16 +927,19 @@ OFFICIAL_ASSOCIATION_CATALOG: dict[str, tuple[AssociationChoice, ...]] = {
         AssociationChoice("SENSOR STI 2000", "official:sensor_X3D_direct"),
         AssociationChoice("TYBOX CONTROL", "official:sensor_X3D_direct"),
         AssociationChoice("TYBOX CONTROL XL", "official:sensor_X3D_direct"),
-        # These two sensor flows are the Tywell Pro/RE2020 integration path
-        # documented by Delta Dore. A legacy TYDOM gateway accepts the radio
-        # search request but can never complete the association.
+        # A TYDOM 1 has been observed to accept this search yet return to idle
+        # without an X3D discovery. Do not offer this dead-end there. Do not
+        # infer compatibility for other gateways from that one observation:
+        # Tywell Pro and Tywell Home are both documented sensor environments.
         AssociationChoice(
-            "Tysense Sun", "official:sensor_X3D_direct", requires_tywell_pro=True
+            "Tysense Sun",
+            "official:sensor_X3D_direct",
+            unsupported_gateway_names=frozenset({"tydom1", "tydom1.0"}),
         ),
         AssociationChoice(
             "Tysense Thermo",
             "official:temperature_X3D_direct",
-            requires_tywell_pro=True,
+            unsupported_gateway_names=frozenset({"tydom1", "tydom1.0"}),
         ),
         AssociationChoice("USAGE SENSOR DF", "official:detector_X3D_direct"),
         AssociationChoice("USAGE SENSOR DFR", "official:detector_X3D_direct"),
@@ -1929,7 +1932,7 @@ class Hub:
         """Return whether a product choice is supported by this gateway."""
         gateway = getattr(self, "devices", {}).get(getattr(self, "_id", ""))
         gateway_name = str(getattr(gateway, "productName", "")).casefold()
-        if choice.requires_tywell_pro and "tywell pro" not in gateway_name:
+        if gateway_name in choice.unsupported_gateway_names:
             return False
 
         product = GROUPABLE_ASSOCIATION_BY_LABEL.get(choice.label)
