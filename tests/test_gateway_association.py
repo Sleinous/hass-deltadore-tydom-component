@@ -346,7 +346,7 @@ class GatewayAssociationTests(IsolatedAsyncioTestCase):
         )
         button = object.__new__(HAGatewayAssociationGuideButton)
         button._hub = guide_hub
-        button._hass = SimpleNamespace(bus=bus)
+        button.hass = SimpleNamespace(bus=bus)
 
         await button.async_press()
 
@@ -357,6 +357,7 @@ class GatewayAssociationTests(IsolatedAsyncioTestCase):
         self.assertEqual(payload["instructions"], ["1. Préparez le bouton A."])
         self.assertEqual(len(payload["illustrations"]), 1)
         self.assertTrue(payload["illustrations"][0].startswith("data:image/svg+xml"))
+        self.assertIsNone(payload["start_association_entity_id"])
 
     def test_tymoov_radio_exposes_only_each_official_step_visual(self) -> None:
         """Avoid presenting a catalogue thumbnail as an association instruction."""

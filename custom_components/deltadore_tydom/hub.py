@@ -519,11 +519,10 @@ GROUPABLE_ASSOCIATION_PRODUCTS: tuple[GroupableAssociationProduct, ...] = (
             ),
         ),
         guide=(
-            "Parcours Home Assistant — ajout d'un bouton de TYXIA 1410 :",
-            "1. Vérifiez la présence du logo « Works with Tydom » au dos de la télécommande.",
-            "2. Dans Home Assistant, appuyez sur « Lancer l'écoute de la passerelle ».",
-            "3. Maintenez {button} pendant 5 secondes : le voyant rouge clignote. Relâchez puis attendez quelques secondes.",
-            "4. Lorsque la confirmation est demandée, appuyez sur {button} pour valider l'association.",
+            "1. Dans Home Assistant, sélectionnez d'abord la voie à associer : {channel}.",
+            "2. Cliquez maintenant sur « Lancer l'écoute de la passerelle » ci-dessous. La passerelle est alors prête à recevoir la télécommande.",
+            "3. Pendant que l'écoute est active, maintenez le {button} de la télécommande pendant 5 secondes, jusqu'à ce que le voyant rouge clignote. Relâchez-le.",
+            "4. Attendez la détection dans Home Assistant. Il n'y a pas de confirmation à attendre dans l'application TYDOM ni de second appui à effectuer.",
         ),
     ),
     GroupableAssociationProduct(
