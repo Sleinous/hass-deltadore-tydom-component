@@ -2905,6 +2905,17 @@ class Hub:
         if isinstance(device, (TydomScene, TydomMoment, TydomGroup)):
             return
 
+        # Some protocol endpoints are auxiliary data sources grouped under a
+        # physical product in Home Assistant (for example, the Tywell weather
+        # endpoint).  They are not independently removable radio products;
+        # exposing a removal control for them duplicates the physical
+        # controller's button and risks targeting the wrong endpoint.
+        registry_device_id = str(
+            getattr(device, "registry_device_id", device.device_id)
+        )
+        if registry_device_id != device.device_id:
+            return
+
         self._maybe_apply_pending_association_name(device)
 
         buttons = []

@@ -1434,6 +1434,20 @@ class GatewayAssociationTests(IsolatedAsyncioTestCase):
         self.assertIsInstance(buttons[0], HADeviceRemovalButton)
         self.assertTrue(buttons[0]._attr_entity_registry_enabled_default)
 
+    def test_auxiliary_grouped_endpoint_does_not_get_product_controls(self) -> None:
+        """Only the physical parent may expose a permanent-removal control."""
+        hub = object.__new__(Hub)
+        hub.add_button_callback = MagicMock()
+
+        hub._maybe_create_device_association_buttons(
+            SimpleNamespace(
+                device_id="weather_42",
+                registry_device_id="physical-tywell-42",
+            )
+        )
+
+        hub.add_button_callback.assert_not_called()
+
     def test_existing_disabled_removal_button_is_reenabled(self) -> None:
         """A prior disabled registry state must not hide this safety control."""
         hub = object.__new__(Hub)
