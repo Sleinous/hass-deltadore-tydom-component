@@ -1202,6 +1202,27 @@ class GatewayAssociationTests(IsolatedAsyncioTestCase):
         self.assertIsInstance(buttons[0], HADeviceRemovalButton)
         self.assertTrue(buttons[0]._attr_entity_registry_enabled_default)
 
+    def test_existing_disabled_removal_button_is_reenabled(self) -> None:
+        """A prior disabled registry state must not hide this safety control."""
+        hub = object.__new__(Hub)
+        hub._hass = object()
+        registry = MagicMock()
+        registry.async_get_entity_id.return_value = "button.c3_dissociation"
+        registry.async_get.return_value = SimpleNamespace(disabled_by="integration")
+        button = HADeviceRemovalButton(
+            SimpleNamespace(device_id="c3", _id="c3"), None
+        )
+
+        with patch(
+            "homeassistant.helpers.entity_registry.async_get",
+            return_value=registry,
+        ):
+            hub._enable_existing_removal_buttons([button])
+
+        registry.async_update_entity.assert_called_once_with(
+            "button.c3_dissociation", disabled_by=None
+        )
+
     async def test_device_removal_from_its_page_reloads_the_gateway_inventory(
         self,
     ) -> None:
