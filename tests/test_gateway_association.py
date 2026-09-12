@@ -422,6 +422,35 @@ class GatewayAssociationTests(IsolatedAsyncioTestCase):
         self.assertEqual(tydom_hub.association_channel_labels, ())
         self.assertEqual(tydom_hub.association_instructions, ())
 
+    def test_tysense_sensors_require_a_tywell_bioclimatic_gateway(self) -> None:
+        """Do not route RT2012/standard-TYDOM Tysense pairing through HA."""
+        tydom_hub = object.__new__(Hub)
+        tydom_hub._association_controls = []
+        tydom_hub._association_category = "Capteurs"
+        tydom_hub._association_product = "Tysense Sun"
+        tydom_hub._association_profile = "official:sensor_X3D_direct"
+        tydom_hub._id = "gateway"
+        tydom_hub.devices = {
+            "gateway": SimpleNamespace(
+                mainReference="21800010", productName="TYDOM1"
+            )
+        }
+
+        self.assertNotIn("Tysense Sun", tydom_hub.association_product_labels)
+        self.assertNotIn("Tysense Thermo", tydom_hub.association_product_labels)
+        self.assertFalse(tydom_hub.association_product_supported)
+
+        tydom_hub.devices["gateway"].productName = "TYDOM PRO"
+
+        self.assertNotIn("Tysense Sun", tydom_hub.association_product_labels)
+        self.assertFalse(tydom_hub.association_product_supported)
+
+        tydom_hub.devices["gateway"].productName = "TYWELL HOME"
+
+        self.assertIn("Tysense Sun", tydom_hub.association_product_labels)
+        self.assertIn("Tysense Thermo", tydom_hub.association_product_labels)
+        self.assertTrue(tydom_hub.association_product_supported)
+
     def test_official_products_hide_ambiguous_generic_recipes(self) -> None:
         """Known hardware must not be mixed with raw radio-profile choices."""
         self.assertEqual(
