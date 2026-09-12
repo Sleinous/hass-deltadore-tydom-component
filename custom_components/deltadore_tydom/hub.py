@@ -120,6 +120,7 @@ class AssociationChoice:
 
     label: str
     profile_id: str | None
+    required_gateway_names: frozenset[str] = frozenset()
 
 
 @dataclass(frozen=True, slots=True)
@@ -925,8 +926,19 @@ OFFICIAL_ASSOCIATION_CATALOG: dict[str, tuple[AssociationChoice, ...]] = {
         AssociationChoice("SENSOR STI 2000", "official:sensor_X3D_direct"),
         AssociationChoice("TYBOX CONTROL", "official:sensor_X3D_direct"),
         AssociationChoice("TYBOX CONTROL XL", "official:sensor_X3D_direct"),
-        AssociationChoice("Tysense Sun", "official:sensor_X3D_direct"),
-        AssociationChoice("Tysense Thermo", "official:temperature_X3D_direct"),
+        # Tysense feeds the Tywell bioclimatic controller.  The RT2012 route
+        # pairs it with an energy manager directly, not through a TYDOM
+        # gateway, so it is intentionally outside this gateway workflow.
+        AssociationChoice(
+            "Tysense Sun",
+            "official:sensor_X3D_direct",
+            required_gateway_names=frozenset({"tywell pro", "tywell home"}),
+        ),
+        AssociationChoice(
+            "Tysense Thermo",
+            "official:temperature_X3D_direct",
+            required_gateway_names=frozenset({"tywell pro", "tywell home"}),
+        ),
         AssociationChoice("USAGE SENSOR DF", "official:detector_X3D_direct"),
         AssociationChoice("USAGE SENSOR DFR", "official:detector_X3D_direct"),
         AssociationChoice("USAGE WEATHER", "official:weather_plt"),
@@ -1741,9 +1753,18 @@ class Hub:
     @property
     def association_product_supported(self) -> bool:
         """Whether the current choice has a documented local install profile."""
-        product = GROUPABLE_ASSOCIATION_BY_LABEL.get(self._association_product)
-        return self._association_profile is not None and (
-            product is None or self._is_groupable_product_supported(product)
+        choice = next(
+            (
+                choice
+                for choice in get_association_choices(self._association_category)
+                if choice.label == self._association_product
+            ),
+            None,
+        )
+        return (
+            self._association_profile is not None
+            and choice is not None
+            and self._is_association_choice_supported(choice)
         )
 
     @property
@@ -1887,17 +1908,26 @@ class Hub:
     ) -> tuple[AssociationChoice, ...]:
         """Return choices allowed by the current gateway and app catalogue."""
         choices = get_association_choices(category or self._association_category)
-        reference = self._association_gateway_reference()
-        if reference is None:
-            return choices
         return tuple(
             choice
             for choice in choices
-            if (
-                (product := GROUPABLE_ASSOCIATION_BY_LABEL.get(choice.label)) is None
-                or reference in product.gateway_refs
-            )
+            if self._is_association_choice_supported(choice)
         )
+
+    def _is_association_choice_supported(self, choice: AssociationChoice) -> bool:
+        """Return whether a product choice is supported by this gateway."""
+        gateway = getattr(self, "devices", {}).get(getattr(self, "_id", ""))
+        gateway_name = str(getattr(gateway, "productName", "")).casefold()
+        if (
+            choice.required_gateway_names
+            and gateway_name
+            and gateway_name not in choice.required_gateway_names
+        ):
+            return False
+
+        product = GROUPABLE_ASSOCIATION_BY_LABEL.get(choice.label)
+        reference = self._association_gateway_reference()
+        return product is None or reference is None or reference in product.gateway_refs
 
     def _selected_groupable_product(self) -> GroupableAssociationProduct | None:
         """Return the special product selected in the gateway controls."""
@@ -2005,6 +2035,18 @@ class Hub:
         if self._association_profile is None:
             raise ValueError(
                 "The selected category has no documented local TYDOM install profile"
+            )
+        choice = next(
+            (
+                choice
+                for choice in get_association_choices(self._association_category)
+                if choice.label == self._association_product
+            ),
+            None,
+        )
+        if choice is None or not self._is_association_choice_supported(choice):
+            raise ValueError(
+                f"{self._association_product} is not supported by this TYDOM gateway"
             )
         configured_product = GROUPABLE_ASSOCIATION_BY_LABEL.get(
             self._association_product
