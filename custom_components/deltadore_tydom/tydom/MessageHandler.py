@@ -161,6 +161,22 @@ def _is_unconfigured_x3d_remote(uid: str, endpoint: dict[str, Any]) -> bool:
     )
 
 
+def _has_configured_remote_button(device_id: str | int) -> bool:
+    """Return whether one button of this physical remote is configured.
+
+    TYDOM continues to report every radio endpoint of a remote after a single
+    button is removed from ``/configs/file``. Those endpoints must not become
+    a second generic unconfigured remote: configured sibling buttons already
+    represent the physical product.
+    """
+    physical_device_id = str(device_id)
+    return any(
+        str(config.get("device_id")) == physical_device_id
+        and config.get("usage") == "remoteControl"
+        for config in endpoint_config.values()
+    )
+
+
 def _unconfigured_x3d_product(
     endpoint: dict[str, Any], device_id: str | int
 ) -> tuple[str, str] | None:
@@ -1274,6 +1290,19 @@ class MessageHandler:
             LOGGER.warning("Ignoring malformed /configs/file response: %s", parsed)
             return []
         config_file_data = copy.deepcopy(parsed)
+
+        # ``/configs/file`` is a complete snapshot. Remove mappings derived
+        # from its previous version before rebuilding them, otherwise a button
+        # removed from the gateway configuration keeps its old name/type and is
+        # recreated during the following device-data refresh.
+        previous_configured_uids = set(endpoint_config)
+        for unique_id in previous_configured_uids:
+            device_name.pop(unique_id, None)
+            device_type.pop(unique_id, None)
+            device_endpoint.pop(unique_id, None)
+            device_tutorial_id.pop(unique_id, None)
+            interrupter_endpoint_config.pop(unique_id, None)
+        endpoint_config.clear()
         for i in parsed["endpoints"]:
             device_unique_id = str(i["id_endpoint"]) + "_" + str(i["id_device"])
 
@@ -1511,6 +1540,7 @@ class MessageHandler:
                         config_file_data is not None
                         and (not name_of_id or not type_of_id)
                         and _is_unconfigured_x3d_remote(unique_id, endpoint)
+                        and not _has_configured_remote_button(device_id)
                     ):
                         name_of_id = f"X3D remote control {device_id}"
                         type_of_id = "remoteControl"
