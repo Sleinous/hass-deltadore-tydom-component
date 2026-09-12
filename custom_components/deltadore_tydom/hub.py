@@ -2820,7 +2820,14 @@ class Hub:
         is_restored_pending_channel = (
             isinstance(device, TydomRemoteControl)
             and device.device_name.startswith("X3D remote control ")
-            and device.button_number is None
+            and (
+                device.button_number is None
+                or getattr(
+                    self._tydom_client,
+                    "_allow_configless_remote_discovery",
+                    False,
+                )
+            )
         ) or (isinstance(device, TydomInterrupter) and device.button is None)
         is_new_groupable_candidate = (
             pending_association is not None
