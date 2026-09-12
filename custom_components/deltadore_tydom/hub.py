@@ -2816,9 +2816,7 @@ class Hub:
         for button in buttons:
             if not isinstance(button, HADeviceRemovalButton):
                 continue
-            entity_id = registry.async_get_entity_id(
-                "button", DOMAIN, button.unique_id
-            )
+            entity_id = registry.async_get_entity_id("button", DOMAIN, button.unique_id)
             if entity_id is None:
                 continue
             entry = registry.async_get(entity_id)
