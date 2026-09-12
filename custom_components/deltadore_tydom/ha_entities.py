@@ -6748,11 +6748,15 @@ class HADeviceRemovalButton(HADeviceAssociationButton):
         self._device = device
         self._removal_callback = removal_callback
         self._attr_icon = "mdi:link-variant-remove"
-        self._attr_name = (
-            "Dissocier ce bouton"
-            if isinstance(device, (TydomInterrupter, TydomRemoteControl))
-            else "Dissocier définitivement l'appareil"
-        )
+        if isinstance(device, (TydomInterrupter, TydomRemoteControl)):
+            button_number = getattr(device, "button_number", None)
+            self._attr_name = (
+                f"Dissocier le bouton {button_number}"
+                if button_number is not None
+                else "Dissocier ce bouton"
+            )
+        else:
+            self._attr_name = "Dissocier définitivement l'appareil"
         self._attr_unique_id = f"{device.device_id}_button_remove_association"
 
     @property
