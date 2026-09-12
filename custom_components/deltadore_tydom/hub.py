@@ -2922,13 +2922,14 @@ class Hub:
             self.add_button_callback(buttons)
 
     def _enable_existing_removal_buttons(self, buttons: list[object]) -> None:
-        """Re-enable removal controls that older versions left disabled.
+        """Migrate the enabled state of permanent-removal controls.
 
         Home Assistant preserves ``disabled_by`` in its entity registry, even
         after an integration changes an entity's enabled-by-default setting.
-        These are deliberate safety controls requested by the user, so restore
-        every existing removal button before submitting it to the button
-        platform.
+        Product controls are deliberate user actions and must be available.
+        Conversely, the gateway's own control would remove the complete
+        integration: migrate pre-existing gateway entities to disabled too,
+        rather than only applying that default to newly created entities.
         """
         if self._hass is None:
             return
@@ -2938,10 +2939,18 @@ class Hub:
         for button in buttons:
             if not isinstance(button, HADeviceRemovalButton):
                 continue
-            # The gateway's own destructive control is deliberately opt-in.
-            # Do not revive a registry entry that Home Assistant has correctly
-            # kept disabled by default.
             if isinstance(button._device, Tydom):
+                entity_id = registry.async_get_entity_id(
+                    "button", DOMAIN, button.unique_id
+                )
+                if entity_id is None:
+                    continue
+                entry = registry.async_get(entity_id)
+                if entry is not None and entry.disabled_by is None:
+                    registry.async_update_entity(
+                        entity_id,
+                        disabled_by=er.RegistryEntryDisabler.INTEGRATION,
+                    )
                 continue
             entity_id = registry.async_get_entity_id("button", DOMAIN, button.unique_id)
             if entity_id is None:
