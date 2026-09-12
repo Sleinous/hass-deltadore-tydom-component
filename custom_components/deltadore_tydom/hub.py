@@ -147,6 +147,7 @@ class GroupableAssociationProduct:
     gateway_refs: frozenset[str]
     channels: tuple[GroupableAssociationChannel, ...]
     guide: tuple[str, ...]
+    illustration_step_indexes: tuple[int, ...]
 
 
 # These profiles are the request values used by the official TYDOM app. The
@@ -493,6 +494,7 @@ GROUPABLE_ASSOCIATION_PRODUCTS: tuple[GroupableAssociationProduct, ...] = (
             "6. Pendant que l'écoute est active, maintenez simultanément ON et {button} pendant 5 secondes, jusqu'au voyant rouge.",
             "7. Attendez que Home Assistant détecte la télécommande, puis appuyez sur {button} pour confirmer la voie sélectionnée.",
         ),
+        illustration_step_indexes=(1, 2, 3, 4, 5, 6),
     ),
     GroupableAssociationProduct(
         label="TYXIA 1410",
@@ -524,6 +526,7 @@ GROUPABLE_ASSOCIATION_PRODUCTS: tuple[GroupableAssociationProduct, ...] = (
             "3. Pendant que l'écoute est active, maintenez le {button} de la télécommande pendant 5 secondes, jusqu'à ce que le voyant rouge clignote. Relâchez-le.",
             "4. Attendez la détection dans Home Assistant. Il n'y a pas de confirmation à attendre dans l'application TYDOM ni de second appui à effectuer.",
         ),
+        illustration_step_indexes=(1, 2, 3),
     ),
     GroupableAssociationProduct(
         label="CLE 8000",
@@ -550,6 +553,7 @@ GROUPABLE_ASSOCIATION_PRODUCTS: tuple[GroupableAssociationProduct, ...] = (
             "4. Pendant que l'écoute est active, appuyez sur {button} pour lancer l'association. Si le voyant s'est éteint, recommencez l'étape 2 puis validez avec {button}.",
             "5. Saisissez le code du clavier, puis appuyez sur {button} pour confirmer l'association.",
         ),
+        illustration_step_indexes=(1, 1, 2, 3, 4),
     ),
     GroupableAssociationProduct(
         label="TYXIA 2310",
@@ -576,6 +580,7 @@ GROUPABLE_ASSOCIATION_PRODUCTS: tuple[GroupableAssociationProduct, ...] = (
             "4. Pendant que l'écoute est active, maintenez {button} pendant 3 secondes, jusqu'à l'allumage du voyant.",
             "5. Attendez que Home Assistant détecte l'interrupteur, puis appuyez sur {button} pour confirmer le bouton sélectionné.",
         ),
+        illustration_step_indexes=(1, 3, 4),
     ),
     GroupableAssociationProduct(
         label="TYXIA 2600",
@@ -596,6 +601,7 @@ GROUPABLE_ASSOCIATION_PRODUCTS: tuple[GroupableAssociationProduct, ...] = (
             ),
         ),
         guide=TYXIA_2600_ASSOCIATION_GUIDE,
+        illustration_step_indexes=(1, 2, 3, 5, 7),
     ),
     GroupableAssociationProduct(
         label="TYXIA 2700",
@@ -622,6 +628,7 @@ GROUPABLE_ASSOCIATION_PRODUCTS: tuple[GroupableAssociationProduct, ...] = (
             "4. Pendant que l'écoute est active, appuyez brièvement sur le bouton : le voyant clignote une fois, puis replacez le sélecteur sur « Auto ».",
             "5. Attendez que Home Assistant détecte le produit, puis appuyez sur l'interrupteur relié à {channel_lower} pour confirmer l'association.",
         ),
+        illustration_step_indexes=(0, 1, 1, 3, 4),
     ),
 )
 
@@ -1953,6 +1960,21 @@ class Hub:
         return get_association_illustration_layout(
             channel.tutorial_id if channel is not None else None
         )
+
+    @property
+    def association_illustration_step_indexes(self) -> tuple[int, ...]:
+        """Return the instruction index described by each official visual.
+
+        Generic catalogue tutorials contain one visual per displayed step. The
+        multi-channel products have extra HA-only steps (selection, listening,
+        discovery) with no Android visual, so their mapping is declared next
+        to the model's physical procedure.
+        """
+        product = self._selected_groupable_product()
+        if product is not None:
+            return product.illustration_step_indexes
+        _, illustrations, _ = self.association_illustration_layout
+        return tuple(range(len(illustrations)))
 
     @property
     def association_instructions(self) -> tuple[str, ...]:
