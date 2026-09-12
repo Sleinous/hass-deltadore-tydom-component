@@ -86,7 +86,7 @@ class DeltaDoreAssociationGuideDialog extends HTMLElement {
           padding: 11px 16px; width: auto;
         }
         .start-association:hover { background: var(--primary-color, #03a9f4); filter: brightness(.92); }
-        .start-association:disabled { cursor: wait; opacity: .7; }
+        .start-association:disabled { cursor: default; opacity: .7; }
         .action-status { color: var(--secondary-text-color, #666); display: block; font-size: 13px; margin-top: 8px; }
       </style>
       <div class="backdrop" role="presentation">
@@ -169,6 +169,8 @@ class DeltaDoreAssociationGuideDialog extends HTMLElement {
             await hass.callService("button", "press", {
               entity_id: this._startAssociationEntityId,
             });
+            startButton.textContent = "Écoute de la passerelle démarrée";
+            status.textContent = "Passez maintenant à l'étape suivante.";
           } catch (error) {
             startButton.disabled = false;
             status.textContent = "Impossible de lancer l'écoute. Réessayez.";
