@@ -1082,6 +1082,34 @@ class GatewayAssociationTests(IsolatedAsyncioTestCase):
 
         self.assertEqual(calls, ["42"])
 
+    def test_every_physical_product_gets_an_enabled_removal_button(self) -> None:
+        """Removal is a gateway operation, not an endpoint capability."""
+        hub = object.__new__(Hub)
+        hub._hass = None
+        hub.add_button_callback = MagicMock()
+        hub._device_association_buttons_created = set()
+        hub._pending_groupable_association = None
+        hub._association_product = ""
+        hub._association_category = ""
+        hub._pending_association_name = None
+        hub._pending_association_known_device_ids = set()
+
+        # Some products do not advertise ``delete_device`` on their endpoint,
+        # but the gateway still owns the radio-level dissociation operation.
+        device = SimpleNamespace(
+            device_id="1410_42",
+            _id="42",
+            _metadata={},
+            _tydom_client=SimpleNamespace(),
+        )
+
+        hub._maybe_create_device_association_buttons(device)
+
+        buttons = hub.add_button_callback.call_args.args[0]
+        self.assertEqual(len(buttons), 1)
+        self.assertIsInstance(buttons[0], HADeviceRemovalButton)
+        self.assertTrue(buttons[0]._attr_entity_registry_enabled_default)
+
     async def test_device_removal_from_its_page_reloads_the_gateway_inventory(
         self,
     ) -> None:

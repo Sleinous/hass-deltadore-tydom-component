@@ -2651,7 +2651,7 @@ class Hub:
             )
 
     def _maybe_create_device_association_buttons(self, device: TydomDevice) -> None:
-        """Expose only association controls advertised by a physical product."""
+        """Expose product controls, including permanent removal for every product."""
         if self.add_button_callback is None:
             return
 
@@ -2728,9 +2728,6 @@ class Hub:
         if (
             removal_key not in self._device_association_buttons_created
             and getattr(device, "_id", None) is not None
-            and callable(
-                getattr(getattr(device, "_tydom_client", None), "delete_device", None)
-            )
         ):
             buttons.append(
                 HADeviceRemovalButton(
