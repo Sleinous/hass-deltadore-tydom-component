@@ -6755,6 +6755,11 @@ class HADeviceRemovalButton(HADeviceAssociationButton):
         )
         self._attr_unique_id = f"{device.device_id}_button_remove_association"
 
+    @property
+    def available(self) -> bool:
+        """Keep this explicit user control available whenever its product exists."""
+        return self._device is not None
+
     async def async_press(self) -> None:
         """Permanently remove this product from its TYDOM gateway."""
         if self._removal_callback is None:
