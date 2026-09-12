@@ -36,6 +36,7 @@ from custom_components.deltadore_tydom.official_association_tutorials import (
 from custom_components.deltadore_tydom.const import DOMAIN
 from custom_components.deltadore_tydom.tydom.tydom_devices import (
     TydomInterrupter,
+    TydomRemoteControl,
     TydomScene,
 )
 
@@ -691,6 +692,97 @@ class GatewayAssociationTests(IsolatedAsyncioTestCase):
                 ("device", "42"),
             ],
         )
+
+    async def test_remote_button_removal_keeps_its_sibling_and_radio_product(
+        self,
+    ) -> None:
+        """Removing one TL 2000/TYXIA 1410 button must retain the remote."""
+        calls: list[tuple[str, object]] = []
+        config = {
+            "endpoints": [
+                {"id_device": 42, "id_endpoint": 1, "name": "Button 1"},
+                {"id_device": 42, "id_endpoint": 2, "name": "Button 2"},
+            ],
+            "groups": [{"id": 84, "type": "relatedendpoints"}],
+        }
+        groups = {
+            "groups": [
+                {
+                    "id": 84,
+                    "devices": [
+                        {"id": 42, "endpoints": [{"id": 1}, {"id": 2}]}
+                    ],
+                }
+            ]
+        }
+
+        async def get_config_file_document() -> dict:
+            return config
+
+        async def get_groups_file_document() -> dict:
+            return groups
+
+        async def post_config_file_document(document: dict) -> None:
+            calls.append(("config", document))
+
+        async def post_groups_file_document(document: dict) -> None:
+            calls.append(("groups", document))
+
+        async def delete_device(device_id: str) -> None:
+            calls.append(("device", device_id))
+
+        device = TydomRemoteControl(
+            SimpleNamespace(
+                get_config_file_document=get_config_file_document,
+                get_groups_file_document=get_groups_file_document,
+                post_config_file_document=post_config_file_document,
+                post_groups_file_document=post_groups_file_document,
+                delete_device=delete_device,
+            ),
+            "42_1",
+            "42",
+            "Button 1",
+            "remoteControl",
+            "1",
+            None,
+            None,
+            {"physical_device_id": "42", "group_id": "84", "button_number": 1},
+        )
+
+        await remove_product_association(device)
+
+        self.assertEqual(
+            calls,
+            [
+                (
+                    "config",
+                    {
+                        "endpoints": [
+                            {
+                                "id_device": 42,
+                                "id_endpoint": 2,
+                                "name": "Button 2",
+                            }
+                        ],
+                        "groups": [{"id": 84, "type": "relatedendpoints"}],
+                    },
+                ),
+                (
+                    "groups",
+                    {
+                        "groups": [
+                            {
+                                "id": 84,
+                                "devices": [{"id": 42, "endpoints": [{"id": 2}]}],
+                            }
+                        ]
+                    },
+                ),
+            ],
+        )
+
+        button = HADeviceRemovalButton(device, None)
+        self.assertEqual(button._attr_name, "Dissocier ce bouton")
 
     async def test_tyxia_2600_migrates_raw_single_button_to_visible_group(self) -> None:
         """A raw one-button discovery becomes one complete groupable product."""
