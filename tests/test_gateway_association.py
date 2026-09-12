@@ -1183,6 +1183,7 @@ class GatewayAssociationTests(IsolatedAsyncioTestCase):
         button = HADeviceRemovalButton(device, None, remove)
 
         self.assertTrue(button._attr_entity_registry_enabled_default)
+        self.assertTrue(button.available)
 
         await button.async_press()
 
