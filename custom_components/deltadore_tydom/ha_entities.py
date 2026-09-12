@@ -7005,6 +7005,21 @@ class HAGatewayAssociationGuideButton(_GatewayAssociationEntity, ButtonEntity):
             for image_id in illustration_ids
             if (image := get_association_illustration_data_url(image_id)) is not None
         ]
+        start_association_entity_id = None
+        try:
+            from homeassistant.helpers import entity_registry as er
+
+            registry = er.async_get(self.hass)
+            start_association_entity_id = registry.async_get_entity_id(
+                "button",
+                DOMAIN,
+                f"{self._hub.hub_id}_start_product_association",
+            )
+        except (AttributeError, KeyError, TypeError):
+            # The guide remains usable during setup before the companion
+            # button has been registered. The normal configuration page still
+            # exposes the action in that short-lived situation.
+            pass
         self.hass.bus.async_fire(
             ASSOCIATION_GUIDE_EVENT,
             {
@@ -7013,6 +7028,7 @@ class HAGatewayAssociationGuideButton(_GatewayAssociationEntity, ButtonEntity):
                 "overview": overview,
                 "illustrations": illustrations,
                 "illustration_mode": ("steps" if stepwise_illustrations else "gallery"),
+                "start_association_entity_id": start_association_entity_id,
             },
         )
 
