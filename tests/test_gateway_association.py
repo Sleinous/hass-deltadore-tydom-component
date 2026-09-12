@@ -362,6 +362,44 @@ class GatewayAssociationTests(IsolatedAsyncioTestCase):
             device, "Bouton A"
         )
 
+    def test_repeated_radio_frame_does_not_expose_manual_finalization(self) -> None:
+        """The discovery update following creation must not duplicate controls."""
+        product = GROUPABLE_ASSOCIATION_BY_LABEL["TYXIA 1410"]
+        client = SimpleNamespace(_configless_remote_generic_endpoint_ids=set())
+        device = TydomRemoteControl(
+            client,
+            "new_endpoint_42",
+            "42",
+            "X3D remote control 42",
+            "remoteControl",
+            "new_endpoint",
+            None,
+            None,
+            {"physical_device_id": "42", "button_number": None},
+        )
+        tydom_hub = object.__new__(Hub)
+        tydom_hub._tydom_client = client
+        tydom_hub._pending_groupable_association = (product, "Bouton 4")
+        tydom_hub._pending_groupable_known_device_ids = {"known_endpoint_42"}
+        tydom_hub._pending_groupable_auto_finalize_failed = False
+        tydom_hub._pending_groupable_candidate_device_id = None
+        tydom_hub._pending_groupable_auto_finalize_task = None
+        tydom_hub._device_association_buttons_created = set()
+        tydom_hub.devices = {device.device_id: device}
+        tydom_hub.add_button_callback = MagicMock()
+        tydom_hub._hass = SimpleNamespace(async_create_task=MagicMock())
+
+        tydom_hub._maybe_create_device_association_buttons(device)
+        tydom_hub._maybe_create_device_association_buttons(device)
+
+        self.assertEqual(
+            tydom_hub._pending_groupable_candidate_device_id, device.device_id
+        )
+        self.assertNotIn(
+            (device.device_id, "finalize_groupable_product"),
+            tydom_hub._device_association_buttons_created,
+        )
+
     async def test_groupable_association_is_armed_before_gateway_reply(self) -> None:
         """The first radio frame must see its selected channel and friendly name."""
         product = GROUPABLE_ASSOCIATION_BY_LABEL["TYXIA 1410"]

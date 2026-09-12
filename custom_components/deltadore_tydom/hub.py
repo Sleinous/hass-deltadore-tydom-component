@@ -2905,23 +2905,22 @@ class Hub:
         buttons = []
         finalization_key = (device.device_id, "finalize_groupable_product")
         pending_association = self._pending_groupable_association
-        is_restored_pending_channel = (
-            isinstance(device, TydomRemoteControl)
-            and device.device_name.startswith("X3D remote control ")
-            and (
-                device.button_number is None
-                or getattr(
-                    self._tydom_client,
-                    "_allow_configless_remote_discovery",
-                    False,
-                )
-            )
-        ) or (isinstance(device, TydomInterrupter) and device.button is None)
+        # A configuration reload can temporarily reconstruct an already known
+        # remote endpoint as an ``X3D remote control``.  It must never be
+        # mistaken for the channel currently being paired: doing so produces
+        # a second candidate and exposes duplicate manual "Configurer" actions.
+        # A pre-existing generic ``Produit N`` is the sole exception: it is a
+        # genuine pending endpoint that needs promotion to the selected family.
+        pending_generic_device_ids = getattr(
+            self._tydom_client,
+            "_configless_remote_generic_endpoint_ids",
+            set(),
+        )
         is_new_groupable_candidate = (
             pending_association is not None
             and (
                 device.device_id not in self._pending_groupable_known_device_ids
-                or is_restored_pending_channel
+                or device.device_id in pending_generic_device_ids
             )
             and (
                 (
@@ -2963,6 +2962,10 @@ class Hub:
         if (
             finalization_key not in self._device_association_buttons_created
             and is_new_groupable_candidate
+            and (
+                self._pending_groupable_auto_finalize_failed
+                or self._pending_groupable_candidate_device_id is None
+            )
         ):
             product, channel = pending_association
             buttons.append(
