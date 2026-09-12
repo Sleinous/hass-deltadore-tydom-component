@@ -6751,7 +6751,7 @@ class HADeviceRemovalButton(HADeviceAssociationButton):
     _attr_entity_registry_enabled_default = True
 
     def __init__(self, device: TydomDevice, hass, removal_callback=None) -> None:
-        """Initialise an intentionally opt-in permanent-removal control."""
+        """Initialise an enabled permanent-removal control."""
         self.hass = hass
         self._device = device
         self._removal_callback = removal_callback

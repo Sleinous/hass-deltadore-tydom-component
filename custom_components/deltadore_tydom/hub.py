@@ -2853,7 +2853,34 @@ class Hub:
             self._device_association_buttons_created.add(key)
 
         if buttons:
+            self._enable_existing_removal_buttons(buttons)
             self.add_button_callback(buttons)
+
+    def _enable_existing_removal_buttons(self, buttons: list[object]) -> None:
+        """Re-enable removal controls that older versions left disabled.
+
+        Home Assistant preserves ``disabled_by`` in its entity registry, even
+        after an integration changes an entity's enabled-by-default setting.
+        These are deliberate safety controls requested by the user, so restore
+        every existing removal button before submitting it to the button
+        platform.
+        """
+        if self._hass is None:
+            return
+        from homeassistant.helpers import entity_registry as er
+
+        registry = er.async_get(self._hass)
+        for button in buttons:
+            if not isinstance(button, HADeviceRemovalButton):
+                continue
+            entity_id = registry.async_get_entity_id(
+                "button", DOMAIN, button.unique_id
+            )
+            if entity_id is None:
+                continue
+            entry = registry.async_get(entity_id)
+            if entry is not None and entry.disabled_by is not None:
+                registry.async_update_entity(entity_id, disabled_by=None)
 
     async def _remove_product_association_and_reload(self, device) -> None:
         """Remove a product, then immediately rebuild the local inventory."""
