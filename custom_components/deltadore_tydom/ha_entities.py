@@ -7230,10 +7230,21 @@ class HAReloadButton(ButtonEntity):
             name=hub._name,
             manufacturer=hub.manufacturer,
         )
+        hub.register_association_control(self)
+
+    @property
+    def available(self) -> bool:
+        """Avoid concurrent inventory rebuilds from the gateway page."""
+        return not self._hub.inventory_syncing
+
+    @property
+    def extra_state_attributes(self) -> dict[str, str]:
+        """Expose explicit progress instead of making disappearance look final."""
+        return {"synchronisation": self._hub.inventory_sync_status}
 
     async def async_press(self) -> None:
         """Handle the button press."""
-        await self._hub.reload_devices()
+        await self._hub.reload_devices_with_status()
 
 
 class HARefreshEnergyButton(ButtonEntity):

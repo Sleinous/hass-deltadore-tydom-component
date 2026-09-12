@@ -1667,6 +1667,8 @@ class Hub:
 
         self.online = True
         self._reload_button_created = False
+        self._inventory_syncing = False
+        self._inventory_sync_error: str | None = None
         self._association_controls_created = False
         self._association_controls: list = []
         self._association_category = next(iter(ASSOCIATION_CATALOG))
@@ -2131,6 +2133,36 @@ class Hub:
         """Update the category/product controls after a selection change."""
         for entity in self._association_controls:
             entity.async_write_ha_state()
+
+    @property
+    def inventory_syncing(self) -> bool:
+        """Whether the gateway inventory is currently being rebuilt."""
+        return self._inventory_syncing
+
+    @property
+    def inventory_sync_status(self) -> str:
+        """Return a user-facing inventory synchronization status."""
+        if self._inventory_syncing:
+            return "Synchronisation de l'inventaire en cours"
+        if self._inventory_sync_error:
+            return f"Échec de la synchronisation : {self._inventory_sync_error}"
+        return "Inventaire à jour"
+
+    async def reload_devices_with_status(self) -> None:
+        """Reload devices once while exposing progress to gateway controls."""
+        if self._inventory_syncing:
+            return
+        self._inventory_syncing = True
+        self._inventory_sync_error = None
+        self._notify_association_controls()
+        try:
+            await self.reload_devices()
+        except Exception as err:
+            self._inventory_sync_error = str(err)
+            raise
+        finally:
+            self._inventory_syncing = False
+            self._notify_association_controls()
 
     def set_association_category(self, category: str) -> None:
         """Choose a usage category and its first valid product family."""
@@ -2970,7 +3002,7 @@ class Hub:
     async def _remove_product_association_and_reload(self, device) -> None:
         """Remove a product, then immediately rebuild the local inventory."""
         await remove_product_association(device)
-        await self.reload_devices()
+        await self.reload_devices_with_status()
 
     async def _async_auto_finalize_groupable_product(
         self, device: TydomRemoteControl | TydomInterrupter
@@ -3020,7 +3052,7 @@ class Hub:
         self._pending_groupable_auto_finalize_failed = False
         self._pending_groupable_auto_finalize_task = None
         LOGGER.info("Configured %s %s as %s", product.label, channel, name)
-        await self.reload_devices()
+        await self.reload_devices_with_status()
 
     def _rename_new_groupable_device(
         self,
