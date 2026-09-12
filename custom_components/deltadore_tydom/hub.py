@@ -2277,6 +2277,10 @@ class Hub:
             self._pending_groupable_name = self._association_name or None
             self._pending_groupable_candidate_device_id = None
             self._pending_groupable_auto_finalize_failed = False
+            # A button deliberately removed from one multi-button remote is
+            # absent from /configs/file. Permit exactly this pending workflow
+            # to surface its radio endpoint; normal presses stay hidden.
+            self._tydom_client._allow_configless_remote_discovery = True
         else:
             self._pending_groupable_association = None
             self._pending_groupable_name = None
@@ -3028,6 +3032,7 @@ class Hub:
             self._pending_groupable_auto_finalize_failed = True
             self._pending_groupable_candidate_device_id = None
             self._pending_groupable_auto_finalize_task = None
+            self._tydom_client._allow_configless_remote_discovery = False
             self._maybe_create_device_association_buttons(device)
 
     async def _finalize_groupable_product_association(
@@ -3051,6 +3056,7 @@ class Hub:
         self._pending_groupable_candidate_device_id = None
         self._pending_groupable_auto_finalize_failed = False
         self._pending_groupable_auto_finalize_task = None
+        self._tydom_client._allow_configless_remote_discovery = False
         LOGGER.info("Configured %s %s as %s", product.label, channel, name)
         await self.reload_devices_with_status()
 
