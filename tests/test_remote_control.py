@@ -274,6 +274,61 @@ class TestRemoteControl(IsolatedAsyncioTestCase):
         self.assertEqual(device.remote_name, f"X3D remote control {device_id}")
         self.assertEqual(device.button_number, 1)
 
+    async def test_pending_remote_button_is_restored_from_configured_sibling(self) -> None:
+        """A re-added remote button must not remain TYDOM's generic Produit N."""
+        device_id = 1693573310
+        configured_uid = f"{device_id}_{device_id}"
+        pending_endpoint_id = 1693573380
+        pending_uid = f"{pending_endpoint_id}_{device_id}"
+        handler_module.config_file_data = {"endpoints": []}
+        handler_module.endpoint_config[configured_uid] = {
+            "device_id": device_id,
+            "endpoint_id": device_id,
+            "usage": "remoteControl",
+        }
+        handler_module.remote_control_info[configured_uid] = {
+            "physical_device_id": str(device_id),
+            "group_id": "1558462107",
+            "name": "TÃ©lÃ©commande C3",
+            "model": "TYXIA 1410",
+            "button_number": 1,
+            "configured_action": "TOGGLE",
+        }
+        handler_module.device_name[pending_uid] = "Produit 2"
+        handler_module.device_type[pending_uid] = "unknown"
+        handler_module.device_metadata[pending_uid] = {
+            "action": {"type": "string"},
+        }
+
+        devices = await self.handler.parse_devices_data(
+            [
+                {
+                    "id": device_id,
+                    "endpoints": [
+                        {
+                            "id": pending_endpoint_id,
+                            "error": 0,
+                            "data": [
+                                {
+                                    "name": "action",
+                                    "validity": "upToDate",
+                                    "value": "TOGGLE",
+                                }
+                            ],
+                        }
+                    ],
+                }
+            ],
+            None,
+        )
+
+        self.assertEqual(len(devices), 1)
+        device = devices[0]
+        self.assertIsInstance(device, TydomRemoteControl)
+        self.assertEqual(device.device_name, f"X3D remote control {device_id}")
+        self.assertEqual(device.remote_name, "TÃ©lÃ©commande C3")
+        self.assertIsNone(device.button_number)
+
     async def test_unconfigured_x3d_meter_is_exposed_from_access_event(self) -> None:
         """A Tywatt announced by /devices/access must not be discarded."""
         device_id = 1789146156

@@ -177,6 +177,53 @@ def _has_configured_remote_button(device_id: str | int) -> bool:
     )
 
 
+def _has_configured_interrupter_button(device_id: str | int) -> bool:
+    """Return whether one button of this physical wall switch is configured."""
+    physical_device_id = str(device_id)
+    return any(
+        str(config.get("device_id")) == physical_device_id
+        for config in interrupter_endpoint_config.values()
+    )
+
+
+def _has_current_action(endpoint: dict[str, Any]) -> bool:
+    """Return whether an endpoint currently exposes a usable radio action."""
+    return any(
+        item.get("name") == "action" and item.get("validity") == "upToDate"
+        for item in endpoint.get("data", [])
+        if isinstance(item, dict)
+    )
+
+
+def _action_from_endpoint(endpoint: dict[str, Any]) -> str:
+    """Extract the non-idle action emitted by a newly discovered endpoint."""
+    return next(
+        (
+            str(item.get("value"))
+            for item in endpoint.get("data", [])
+            if isinstance(item, dict)
+            and item.get("name") == "action"
+            and item.get("value") != "IDLE"
+        ),
+        "TOGGLE",
+    )
+
+
+def _sibling_info(
+    info_by_endpoint: dict[str, dict[str, Any]], device_id: str | int
+) -> dict[str, Any]:
+    """Copy physical-product information from any configured sibling endpoint."""
+    physical_device_id = str(device_id)
+    return next(
+        (
+            info.copy()
+            for info in info_by_endpoint.values()
+            if str(info.get("physical_device_id")) == physical_device_id
+        ),
+        {},
+    )
+
+
 def _unconfigured_x3d_product(
     endpoint: dict[str, Any], device_id: str | int
 ) -> tuple[str, str] | None:
@@ -1531,6 +1578,65 @@ class MessageHandler:
                     name_of_id = self.get_name_from_id(unique_id)
                     type_of_id = self.get_type_from_id(unique_id)
 
+                    # A partially associated multi-button product is retained by
+                    # TYDOM as an ``unknown`` "Produit N" configuration entry.
+                    # It is not a new generic device: another configured endpoint
+                    # of the same physical product identifies its family.  Restore
+                    # the temporary endpoint to that family so Hub can finish the
+                    # association and add it to the existing related-endpoint
+                    # group.  Without this, the finalisation is never reached and
+                    # the TYDOM application leaves the product under Non gere.
+                    if (
+                        config_file_data is not None
+                        and type_of_id == "unknown"
+                        and _has_current_action(endpoint)
+                        and _has_configured_remote_button(device_id)
+                    ):
+                        name_of_id = f"X3D remote control {device_id}"
+                        type_of_id = "remoteControl"
+                        device_name[unique_id] = name_of_id
+                        device_type[unique_id] = type_of_id
+                        remote_info = _sibling_info(remote_control_info, device_id)
+                        remote_info.update(
+                            {
+                                "physical_device_id": str(device_id),
+                                "button_number": None,
+                                "configured_action": _action_from_endpoint(endpoint),
+                            }
+                        )
+                        remote_control_info[unique_id] = remote_info
+                        LOGGER.info(
+                            "Restored pending X3D remote endpoint "
+                            "(device_id=%s, endpoint_id=%s)",
+                            device_id,
+                            endpoint_id,
+                        )
+                    elif (
+                        config_file_data is not None
+                        and type_of_id == "unknown"
+                        and _has_current_action(endpoint)
+                        and _has_configured_interrupter_button(device_id)
+                    ):
+                        name_of_id = f"X3D wall switch {device_id}"
+                        type_of_id = "interrupter"
+                        device_name[unique_id] = name_of_id
+                        device_type[unique_id] = type_of_id
+                        interrupter_details = _sibling_info(interrupter_info, device_id)
+                        interrupter_details.update(
+                            {
+                                "physical_device_id": str(device_id),
+                                "button": None,
+                                "configured_action": _action_from_endpoint(endpoint),
+                            }
+                        )
+                        interrupter_info[unique_id] = interrupter_details
+                        LOGGER.info(
+                            "Restored pending X3D wall-switch endpoint "
+                            "(device_id=%s, endpoint_id=%s)",
+                            device_id,
+                            endpoint_id,
+                        )
+
                     if (
                         # Wait for /configs/file before treating an unknown
                         # endpoint as a generic remote.  During startup the
@@ -1553,15 +1659,7 @@ class MessageHandler:
                                 "name": name_of_id,
                                 "model": "Delta Dore X3D remote control",
                                 "button_number": 1,
-                                "configured_action": next(
-                                    (
-                                        str(item.get("value"))
-                                        for item in endpoint.get("data", [])
-                                        if item.get("name") == "action"
-                                        and item.get("value") != "IDLE"
-                                    ),
-                                    "TOGGLE",
-                                ),
+                                "configured_action": _action_from_endpoint(endpoint),
                             },
                         )
                         LOGGER.info(
