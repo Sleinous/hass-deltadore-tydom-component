@@ -2842,9 +2842,7 @@ class Hub:
             isinstance(device, TydomRemoteControl)
             and device.device_name.startswith("X3D remote control ")
             and device.button_number is None
-        ) or (
-            isinstance(device, TydomInterrupter) and device.button is None
-        )
+        ) or (isinstance(device, TydomInterrupter) and device.button is None)
         is_new_groupable_candidate = (
             pending_association is not None
             and (
