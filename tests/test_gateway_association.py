@@ -192,6 +192,27 @@ class GatewayAssociationTests(IsolatedAsyncioTestCase):
             tydom_hub.association_instructions[9],
         )
 
+    def test_groupable_visuals_have_an_explicit_valid_step_mapping(self) -> None:
+        """Never infer an illustration's step from its list position."""
+        for product in GROUPABLE_ASSOCIATION_PRODUCTS:
+            _, illustrations, _ = get_association_illustration_layout(
+                product.channels[0].tutorial_id
+            )
+            self.assertEqual(
+                len(product.illustration_step_indexes),
+                len(illustrations),
+                product.label,
+            )
+            self.assertTrue(
+                all(0 <= index < len(product.guide) for index in product.illustration_step_indexes),
+                product.label,
+            )
+
+        self.assertEqual(
+            GROUPABLE_ASSOCIATION_BY_LABEL["TYXIA 1410"].illustration_step_indexes,
+            (1, 2, 3),
+        )
+
     def test_groupable_product_can_keep_an_optional_friendly_name(self) -> None:
         """The name field is limited to groupable products and normalizes text."""
         tydom_hub = object.__new__(Hub)
@@ -376,6 +397,7 @@ class GatewayAssociationTests(IsolatedAsyncioTestCase):
         self.assertEqual(payload["instructions"], ["1. Préparez le bouton A."])
         self.assertEqual(len(payload["illustrations"]), 1)
         self.assertTrue(payload["illustrations"][0].startswith("data:image/svg+xml"))
+        self.assertEqual(payload["illustration_step_indexes"], [])
         self.assertIsNone(payload["start_association_entity_id"])
 
     def test_tymoov_radio_exposes_only_each_official_step_visual(self) -> None:
