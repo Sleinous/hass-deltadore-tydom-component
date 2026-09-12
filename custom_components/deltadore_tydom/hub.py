@@ -494,7 +494,10 @@ GROUPABLE_ASSOCIATION_PRODUCTS: tuple[GroupableAssociationProduct, ...] = (
             "6. Pendant que l'écoute est active, maintenez simultanément ON et {button} pendant 5 secondes, jusqu'au voyant rouge.",
             "7. Attendez que Home Assistant détecte la télécommande, puis appuyez sur {button} pour confirmer la voie sélectionnée.",
         ),
-        illustration_step_indexes=(1, 2, 3, 4, 5, 6),
+        # Verified against catalog_rcu_tl2000_btn1_step1..6 from the APK:
+        # the first visual is the compatibility mark; the gateway-listening
+        # instruction intentionally has no physical illustration.
+        illustration_step_indexes=(0, 1, 2, 3, 5, 6),
     ),
     GroupableAssociationProduct(
         label="TYXIA 1410",
@@ -526,7 +529,9 @@ GROUPABLE_ASSOCIATION_PRODUCTS: tuple[GroupableAssociationProduct, ...] = (
             "3. Pendant que l'écoute est active, maintenez le {button} de la télécommande pendant 5 secondes, jusqu'à ce que le voyant rouge clignote. Relâchez-le.",
             "4. Attendez la détection dans Home Assistant. Il n'y a pas de confirmation à attendre dans l'application TYDOM ni de second appui à effectuer.",
         ),
-        illustration_step_indexes=(1, 2, 3),
+        # Verified against catalog_rcu_tyxia1410_btn1_step1..3 from the APK:
+        # compatibility mark, 5-second press, then channel confirmation.
+        illustration_step_indexes=(0, 2, 3),
     ),
     GroupableAssociationProduct(
         label="CLE 8000",

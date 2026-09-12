@@ -234,7 +234,7 @@ class GatewayAssociationTests(IsolatedAsyncioTestCase):
 
         self.assertEqual(
             GROUPABLE_ASSOCIATION_BY_LABEL["TYXIA 1410"].illustration_step_indexes,
-            (1, 2, 3),
+            (0, 2, 3),
         )
 
     def test_groupable_product_can_keep_an_optional_friendly_name(self) -> None:

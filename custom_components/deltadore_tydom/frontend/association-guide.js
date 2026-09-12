@@ -138,8 +138,12 @@ class DeltaDoreAssociationGuideDialog extends HTMLElement {
     instructions.forEach((instruction, index) => {
       const item = document.createElement("li");
       item.textContent = instruction.replace(/^\d+\.\s*/, "");
-      const illustrationIndex = (this._illustrationStepIndexes || []).indexOf(index);
-      if (illustrationIndex >= 0 && this._illustrations?.[illustrationIndex]) {
+      const illustrationIndexes = (this._illustrationStepIndexes || [])
+        .map((stepIndex, illustrationIndex) => ({ stepIndex, illustrationIndex }))
+        .filter(({ stepIndex }) => stepIndex === index)
+        .map(({ illustrationIndex }) => illustrationIndex);
+      illustrationIndexes.forEach((illustrationIndex) => {
+        if (!this._illustrations?.[illustrationIndex]) return;
         const figure = document.createElement("figure");
         figure.className = "step-illustration";
         const image = document.createElement("img");
@@ -149,7 +153,7 @@ class DeltaDoreAssociationGuideDialog extends HTMLElement {
         caption.textContent = `Illustration de l'étape ${index + 1}`;
         figure.append(image, caption);
         item.append(figure);
-      }
+      });
       if (
         this._startAssociationEntityId
         && instruction.includes("Lancer l'écoute de la passerelle")
