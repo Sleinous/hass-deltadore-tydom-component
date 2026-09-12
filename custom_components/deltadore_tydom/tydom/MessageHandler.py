@@ -1636,6 +1636,33 @@ class MessageHandler:
                             device_id,
                             endpoint_id,
                         )
+                    elif (
+                        config_file_data is not None
+                        and type_of_id == "unknown"
+                        and _has_current_action(endpoint)
+                        and getattr(
+                            self.tydom_client,
+                            "_allow_configless_remote_discovery",
+                            False,
+                        )
+                    ):
+                        name_of_id = f"X3D remote control {device_id}"
+                        type_of_id = "remoteControl"
+                        device_name[unique_id] = name_of_id
+                        device_type[unique_id] = type_of_id
+                        remote_control_info[unique_id] = {
+                            "physical_device_id": str(device_id),
+                            "name": name_of_id,
+                            "model": "Delta Dore X3D remote control",
+                            "button_number": 1,
+                            "configured_action": _action_from_endpoint(endpoint),
+                        }
+                        LOGGER.info(
+                            "Recovered pending standalone X3D remote endpoint "
+                            "(device_id=%s, endpoint_id=%s)",
+                            device_id,
+                            endpoint_id,
+                        )
 
                     if (
                         # Wait for /configs/file before treating an unknown
