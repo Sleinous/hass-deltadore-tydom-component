@@ -447,14 +447,14 @@ TYXIA_2600_ASSOCIATION_GUIDE = (
     "les modes, puis conservez celui correspondant au type d'interrupteur raccordé.",
     "4. Maintenez B pendant 3 secondes, jusqu'à l'allumage fixe du voyant vert, "
     "pour valider le mode sélectionné.",
-    "5. Dans Home Assistant, appuyez sur « Lancer l'écoute de la passerelle » "
+    "5. Cliquez maintenant sur « Lancer l'écoute de la passerelle » ci-dessous, "
     "avant de poursuivre avec le TYXIA 2600.",
     "6. Maintenez le bouton {button} physique pendant 3 secondes, jusqu'à ce que le "
     "voyant rouge clignote.",
-    "7. Attendez pendant que l'association est en cours.",
-    "8. Lorsque la confirmation est demandée, appuyez sur l'interrupteur physique "
-    "relié à la voie {button} ({channel}) : ce n'est pas un nouvel appui sur "
-    "le bouton du module TYXIA.",
+    "7. Attendez que Home Assistant détecte le nouveau produit.",
+    "8. Pour confirmer la voie {button} ({channel}), appuyez sur l'interrupteur "
+    "physique qui lui est relié. Ce n'est pas un nouvel appui sur le bouton du "
+    "module TYXIA.",
 )
 
 
@@ -485,14 +485,13 @@ GROUPABLE_ASSOCIATION_PRODUCTS: tuple[GroupableAssociationProduct, ...] = (
             ),
         ),
         guide=(
-            "Parcours Home Assistant — ajout d'une voie de TL 2000 :",
-            "1. Vérifiez la présence du logo « Works with Tydom » au dos de la télécommande.",
+            "1. Dans Home Assistant, sélectionnez la voie à associer : {channel}.",
             "2. Maintenez simultanément 1 et 2 pendant 5 secondes, jusqu'au voyant orange.",
             "3. Appuyez une fois sur {button}. Continuez lorsque le voyant clignote par séries de 4 ; un nouvel appui sur {button} change ce nombre.",
             "4. Si le voyant clignote encore, appuyez sur ON pour qu'il devienne vert.",
-            "5. Dans Home Assistant, appuyez sur « Lancer l'écoute de la passerelle ».",
-            "6. Maintenez simultanément ON et {button} pendant 5 secondes, jusqu'au voyant rouge.",
-            "7. Attendez la détection par la passerelle, puis appuyez sur {button} pour confirmer.",
+            "5. Cliquez maintenant sur « Lancer l'écoute de la passerelle » ci-dessous.",
+            "6. Pendant que l'écoute est active, maintenez simultanément ON et {button} pendant 5 secondes, jusqu'au voyant rouge.",
+            "7. Attendez que Home Assistant détecte la télécommande, puis appuyez sur {button} pour confirmer la voie sélectionnée.",
         ),
     ),
     GroupableAssociationProduct(
@@ -545,11 +544,10 @@ GROUPABLE_ASSOCIATION_PRODUCTS: tuple[GroupableAssociationProduct, ...] = (
             ),
         ),
         guide=(
-            "Parcours Home Assistant — ajout d'une touche de CLE 8000 :",
-            "1. Vérifiez la présence du logo « Works with Tydom » au dos du clavier.",
+            "1. Dans Home Assistant, sélectionnez la touche à associer : {channel}.",
             "2. Maintenez la touche 2 jusqu'au clignotement vert par séries de 1. La touche 5 change le nombre de clignotements.",
-            "3. Dans Home Assistant, appuyez sur « Lancer l'écoute de la passerelle ».",
-            "4. Appuyez sur {button} pour lancer l'association. Si le voyant s'est éteint, recommencez l'étape 2 puis validez avec {button}.",
+            "3. Cliquez maintenant sur « Lancer l'écoute de la passerelle » ci-dessous.",
+            "4. Pendant que l'écoute est active, appuyez sur {button} pour lancer l'association. Si le voyant s'est éteint, recommencez l'étape 2 puis validez avec {button}.",
             "5. Saisissez le code du clavier, puis appuyez sur {button} pour confirmer l'association.",
         ),
     ),
@@ -572,11 +570,11 @@ GROUPABLE_ASSOCIATION_PRODUCTS: tuple[GroupableAssociationProduct, ...] = (
             ),
         ),
         guide=(
-            "Parcours Home Assistant — ajout d'un bouton de TYXIA 2310 :",
-            "1. Appuyez une fois sur T2, au dos de l'interrupteur. Continuez lorsque le voyant frontal clignote par séries de 1 ; T2 change ce nombre.",
-            "2. Dans Home Assistant, appuyez sur « Lancer l'écoute de la passerelle ».",
-            "3. Maintenez {button} pendant 3 secondes, jusqu'à l'allumage du voyant.",
-            "4. Lorsque la confirmation est demandée, appuyez sur {button} pour valider l'association.",
+            "1. Dans Home Assistant, sélectionnez le bouton à associer : {channel}.",
+            "2. Appuyez une fois sur T2, au dos de l'interrupteur. Continuez lorsque le voyant frontal clignote par séries de 1 ; T2 change ce nombre.",
+            "3. Cliquez maintenant sur « Lancer l'écoute de la passerelle » ci-dessous.",
+            "4. Pendant que l'écoute est active, maintenez {button} pendant 3 secondes, jusqu'à l'allumage du voyant.",
+            "5. Attendez que Home Assistant détecte l'interrupteur, puis appuyez sur {button} pour confirmer le bouton sélectionné.",
         ),
     ),
     GroupableAssociationProduct(
@@ -618,12 +616,11 @@ GROUPABLE_ASSOCIATION_PRODUCTS: tuple[GroupableAssociationProduct, ...] = (
             ),
         ),
         guide=(
-            "Parcours Home Assistant — ajout d'une voie de TYXIA 2700 :",
             "1. Tournez le sélecteur sur le mode 1.",
             "2. Sélectionnez {channel} avec le sélecteur.",
-            "3. Dans Home Assistant, appuyez sur « Lancer l'écoute de la passerelle ».",
-            "4. Appuyez brièvement sur le bouton : le voyant clignote une fois, puis replacez le sélecteur sur « Auto ».",
-            "5. Lorsque la confirmation est demandée, appuyez sur l'interrupteur relié à {channel_lower} pour valider l'association.",
+            "3. Cliquez maintenant sur « Lancer l'écoute de la passerelle » ci-dessous.",
+            "4. Pendant que l'écoute est active, appuyez brièvement sur le bouton : le voyant clignote une fois, puis replacez le sélecteur sur « Auto ».",
+            "5. Attendez que Home Assistant détecte le produit, puis appuyez sur l'interrupteur relié à {channel_lower} pour confirmer l'association.",
         ),
     ),
 )
