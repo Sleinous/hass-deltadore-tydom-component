@@ -6694,10 +6694,28 @@ class HADeviceAssociationButton(ButtonEntity, HAEntity):
                 }
             )
 
+        # Auxiliary protocol endpoints (e.g. the weather endpoint grouped
+        # under a Tywell controller) share a physical registry identity with
+        # their parent.  The control must use that same identity: otherwise
+        # Home Assistant creates a separate generic ``Produit N`` device only
+        # to host the button.
+        registry_device_id = str(
+            getattr(self._device, "registry_device_id", self._device.device_id)
+        )
+        grouped_with_parent = registry_device_id != self._device.device_id
+        registry_device_name = str(
+            getattr(
+                self._device,
+                "registry_device_name",
+                getattr(self._device, "device_name", self._device.device_id),
+            )
+        )
         device_info = self._get_device_info()
         info: DeviceInfo = {
-            "identifiers": {(DOMAIN, self._device.device_id)},
-            "name": self._device.device_name,
+            "identifiers": {(DOMAIN, registry_device_id)},
+            "name": registry_device_name
+            if grouped_with_parent
+            else getattr(self._device, "device_name", self._device.device_id),
             "manufacturer": device_info["manufacturer"],
         }
         if "model" in device_info:

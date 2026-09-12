@@ -6,6 +6,7 @@ from unittest import IsolatedAsyncioTestCase
 from custom_components.deltadore_tydom.ha_entities import (
     ASSOCIATION_COMMAND,
     IDENTIFY_COMMAND,
+    DOMAIN,
     start_command,
     supports_command,
 )
@@ -83,3 +84,17 @@ class DeviceAssociationTests(IsolatedAsyncioTestCase):
             device._tydom_client.calls,
             [("42", "43", ASSOCIATION_COMMAND, "START")],
         )
+
+    def test_control_uses_the_parent_registry_device_when_grouped(self) -> None:
+        """Do not create a generic device for an auxiliary endpoint control."""
+        device = self._device()
+        device.device_name = "Produit 1"
+        device.registry_device_id = "physical-tywell"
+        device.registry_device_name = "Tywell Ctrl RdC"
+
+        button = HADeviceAssociationButton(device, None, ASSOCIATION_COMMAND)
+
+        self.assertEqual(
+            button.device_info["identifiers"], {(DOMAIN, "physical-tywell")}
+        )
+        self.assertEqual(button.device_info["name"], "Tywell Ctrl RdC")
