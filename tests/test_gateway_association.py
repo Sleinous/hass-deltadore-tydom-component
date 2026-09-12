@@ -36,6 +36,7 @@ from custom_components.deltadore_tydom.official_association_tutorials import (
 )
 from custom_components.deltadore_tydom.const import DOMAIN
 from custom_components.deltadore_tydom.tydom.tydom_devices import (
+    Tydom,
     TydomInterrupter,
     TydomRemoteControl,
     TydomScene,
@@ -1231,6 +1232,23 @@ class GatewayAssociationTests(IsolatedAsyncioTestCase):
 
         self.assertEqual(calls, ["42"])
 
+    def test_gateway_removal_button_is_disabled_by_default(self) -> None:
+        """Only the gateway itself keeps its destructive control opt-in."""
+        gateway = Tydom(
+            MagicMock(),
+            "Tydom-072a1f",
+            "gateway",
+            "Tydom-072a1f",
+            "gateway",
+            None,
+            {},
+            None,
+        )
+
+        button = HADeviceRemovalButton(gateway, None)
+
+        self.assertFalse(button._attr_entity_registry_enabled_default)
+
     def test_every_physical_product_gets_an_enabled_removal_button(self) -> None:
         """Removal is a gateway operation, not an endpoint capability."""
         hub = object.__new__(Hub)
@@ -1279,6 +1297,33 @@ class GatewayAssociationTests(IsolatedAsyncioTestCase):
         registry.async_update_entity.assert_called_once_with(
             "button.c3_dissociation", disabled_by=None
         )
+
+    def test_existing_disabled_gateway_removal_button_stays_disabled(self) -> None:
+        """The gateway's opt-in removal control must not be revived."""
+        hub = object.__new__(Hub)
+        hub._hass = object()
+        registry = MagicMock()
+        gateway = Tydom(
+            MagicMock(),
+            "Tydom-072a1f",
+            "gateway",
+            "Tydom-072a1f",
+            "gateway",
+            None,
+            {},
+            None,
+        )
+
+        with patch(
+            "homeassistant.helpers.entity_registry.async_get",
+            return_value=registry,
+        ):
+            hub._enable_existing_removal_buttons(
+                [HADeviceRemovalButton(gateway, None)]
+            )
+
+        registry.async_get_entity_id.assert_not_called()
+        registry.async_update_entity.assert_not_called()
 
     async def test_device_removal_from_its_page_reloads_the_gateway_inventory(
         self,
