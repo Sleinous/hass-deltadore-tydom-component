@@ -1046,6 +1046,10 @@ def _get_local_association_hub(tydom_hub):
 async def remove_product_association(device) -> None:
     """Remove a product cleanly from the TYDOM gateway.
 
+    A button endpoint of a remote control or wall switch is removed on its
+    own while sibling buttons are still configured.  Only removal of the last
+    configured button deletes the physical radio product.
+
     A radio DELETE alone is insufficient for devices created as a
     ``relatedendpoints`` group (for example a TYXIA 2600): it leaves the
     group's configuration in the gateway.  The official application removes
@@ -1077,6 +1081,96 @@ async def remove_product_association(device) -> None:
         raise ValueError("The gateway returned an incomplete configuration")
 
     association_group_id = getattr(device, "association_group_id", None)
+    is_button_endpoint = isinstance(device, (TydomInterrupter, TydomRemoteControl))
+    endpoint_id = getattr(device, "_endpoint", None)
+    device_id = str(device_id)
+
+    if is_button_endpoint and endpoint_id is not None:
+        endpoint_id = str(endpoint_id)
+        matching_endpoints = [
+            endpoint
+            for endpoint in endpoints
+            if isinstance(endpoint, dict)
+            and str(endpoint.get("id_device")) == device_id
+            and str(endpoint.get("id_endpoint")) == endpoint_id
+        ]
+        device_endpoints = [
+            endpoint
+            for endpoint in endpoints
+            if isinstance(endpoint, dict)
+            and str(endpoint.get("id_device")) == device_id
+        ]
+        if len(matching_endpoints) != 1:
+            raise ValueError("The selected button is no longer configured")
+
+        # A two- (or multi-) button remote remains paired until its final
+        # configured button is removed.  This mirrors the official app: remove
+        # the selected endpoint from both configuration documents, but never
+        # issue a radio DELETE for the physical remote at this stage.
+        if len(device_endpoints) > 1:
+            updated_config = copy.deepcopy(config)
+            updated_config["endpoints"] = [
+                endpoint
+                for endpoint in endpoints
+                if endpoint is not matching_endpoints[0]
+            ]
+
+            updated_groups = copy.deepcopy(groups)
+            if association_group_id is not None:
+                group_id = str(association_group_id)
+                membership = next(
+                    (
+                        group
+                        for group in updated_groups["groups"]
+                        if isinstance(group, dict) and str(group.get("id")) == group_id
+                    ),
+                    None,
+                )
+                if membership is None:
+                    raise ValueError(
+                        "The dedicated association group is no longer present on the gateway"
+                    )
+                device_membership = next(
+                    (
+                        member
+                        for member in membership.get("devices", [])
+                        if isinstance(member, dict)
+                        and str(member.get("id")) == device_id
+                    ),
+                    None,
+                )
+                if device_membership is None or not isinstance(
+                    device_membership.get("endpoints"), list
+                ):
+                    raise ValueError(
+                        "The selected button is no longer part of its association group"
+                    )
+                device_membership["endpoints"] = [
+                    member_endpoint
+                    for member_endpoint in device_membership["endpoints"]
+                    if not (
+                        isinstance(member_endpoint, dict)
+                        and str(member_endpoint.get("id")) == endpoint_id
+                    )
+                ]
+
+            config_updated = False
+            try:
+                await tydom_client.post_config_file_document(updated_config)
+                config_updated = True
+                if association_group_id is not None:
+                    await tydom_client.post_groups_file_document(updated_groups)
+            except Exception:
+                if config_updated:
+                    try:
+                        await tydom_client.post_config_file_document(config)
+                    except Exception:
+                        LOGGER.exception(
+                            "Unable to restore /configs/file after failed button removal"
+                        )
+                raise
+            return
+
     if association_group_id is None:
         # The official app can configure a single TYXIA 2600 button as an
         # interrupter without a related-endpoints group. It is safe to remove
@@ -1086,7 +1180,6 @@ async def remove_product_association(device) -> None:
                 "Safe complete removal is not yet available for this product. "
                 "It may belong to user groups, scenarios or moments."
             )
-        device_id = str(device_id)
         endpoint_id = str(getattr(device, "_endpoint", ""))
         matching_endpoints = [
             endpoint
@@ -1154,7 +1247,6 @@ async def remove_product_association(device) -> None:
             "related-endpoints groups"
         )
 
-    device_id = str(device_id)
     member_ids = {
         str(member.get("id"))
         for member in group_membership.get("devices", [])
