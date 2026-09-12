@@ -1397,6 +1397,9 @@ class GatewayAssociationTests(IsolatedAsyncioTestCase):
         """A successful device-page removal must not require a manual reload."""
         hub = object.__new__(Hub)
         hub.reload_devices = AsyncMock()
+        hub._inventory_syncing = False
+        hub._inventory_sync_error = None
+        hub._association_controls = []
         device = SimpleNamespace(device_id="42")
 
         with patch(
