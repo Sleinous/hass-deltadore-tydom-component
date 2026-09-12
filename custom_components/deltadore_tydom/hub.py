@@ -485,7 +485,7 @@ GROUPABLE_ASSOCIATION_PRODUCTS: tuple[GroupableAssociationProduct, ...] = (
             ),
         ),
         guide=(
-            "1. Dans Home Assistant, sélectionnez la voie à associer : {channel}.",
+            "1. Vérifiez au dos de la télécommande la présence du logo « Works with Tydom » : une version TL 2000 sans ce logo existe et ne peut pas être associée. Dans Home Assistant, sélectionnez ensuite la voie à associer : {channel}.",
             "2. Maintenez simultanément 1 et 2 pendant 5 secondes, jusqu'au voyant orange.",
             "3. Appuyez une fois sur {button}. Continuez lorsque le voyant clignote par séries de 4 ; un nouvel appui sur {button} change ce nombre.",
             "4. Si le voyant clignote encore, appuyez sur ON pour qu'il devienne vert.",
@@ -519,7 +519,7 @@ GROUPABLE_ASSOCIATION_PRODUCTS: tuple[GroupableAssociationProduct, ...] = (
             ),
         ),
         guide=(
-            "1. Dans Home Assistant, sélectionnez d'abord la voie à associer : {channel}.",
+            "1. Vérifiez au dos de la télécommande la présence du logo « Works with Tydom » : une version TYXIA 1410 sans ce logo existe et ne peut pas être associée. Dans Home Assistant, sélectionnez ensuite la voie à associer : {channel}.",
             "2. Cliquez maintenant sur « Lancer l'écoute de la passerelle » ci-dessous. La passerelle est alors prête à recevoir la télécommande.",
             "3. Pendant que l'écoute est active, maintenez le {button} de la télécommande pendant 5 secondes, jusqu'à ce que le voyant rouge clignote. Relâchez-le.",
             "4. Attendez la détection dans Home Assistant. Il n'y a pas de confirmation à attendre dans l'application TYDOM ni de second appui à effectuer.",
