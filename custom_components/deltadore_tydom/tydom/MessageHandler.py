@@ -1560,6 +1560,24 @@ class MessageHandler:
                 for endpoint in i["endpoints"]:
                     endpoint_id = endpoint["id"]
                     unique_id = str(endpoint_id) + "_" + str(device_id)
+                    known_pending_endpoints = getattr(
+                        self.tydom_client,
+                        "_configless_remote_known_endpoint_ids",
+                        set(),
+                    )
+                    generic_pending_endpoints = getattr(
+                        self.tydom_client,
+                        "_configless_remote_generic_endpoint_ids",
+                        set(),
+                    )
+                    allow_pending_remote_discovery = getattr(
+                        self.tydom_client,
+                        "_allow_configless_remote_discovery",
+                        False,
+                    ) and (
+                        unique_id not in known_pending_endpoints
+                        or unique_id in generic_pending_endpoints
+                    )
 
                     # Check for collisions
                     if unique_id in seen_unique_ids:
@@ -1640,11 +1658,7 @@ class MessageHandler:
                         config_file_data is not None
                         and type_of_id == "unknown"
                         and _has_current_action(endpoint)
-                        and getattr(
-                            self.tydom_client,
-                            "_allow_configless_remote_discovery",
-                            False,
-                        )
+                        and allow_pending_remote_discovery
                     ):
                         name_of_id = f"X3D remote control {device_id}"
                         type_of_id = "remoteControl"
@@ -1675,11 +1689,7 @@ class MessageHandler:
                         and _is_unconfigured_x3d_remote(unique_id, endpoint)
                         and (
                             not _has_configured_remote_button(device_id)
-                            or getattr(
-                                self.tydom_client,
-                                "_allow_configless_remote_discovery",
-                                False,
-                            )
+                            or allow_pending_remote_discovery
                         )
                     ):
                         name_of_id = f"X3D remote control {device_id}"

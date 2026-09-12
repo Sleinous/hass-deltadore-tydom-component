@@ -38,6 +38,7 @@ from custom_components.deltadore_tydom.const import DOMAIN
 from custom_components.deltadore_tydom.tydom.tydom_devices import (
     Tydom,
     TydomInterrupter,
+    TydomDevice,
     TydomRemoteControl,
     TydomScene,
 )
@@ -157,11 +158,16 @@ class GatewayAssociationTests(IsolatedAsyncioTestCase):
         """Every bespoke remote/switch guide can start association in HA."""
         for product in GROUPABLE_ASSOCIATION_PRODUCTS:
             self.assertTrue(
-                any("Lancer l'écoute de la passerelle" in step for step in product.guide),
+                any(
+                    "Lancer l'écoute de la passerelle" in step for step in product.guide
+                ),
                 product.label,
             )
             self.assertFalse(
-                any("Lorsque la confirmation est demandée" in step for step in product.guide),
+                any(
+                    "Lorsque la confirmation est demandée" in step
+                    for step in product.guide
+                ),
                 product.label,
             )
 
@@ -205,7 +211,10 @@ class GatewayAssociationTests(IsolatedAsyncioTestCase):
                 product.label,
             )
             self.assertTrue(
-                all(0 <= index < len(product.guide) for index in product.illustration_step_indexes),
+                all(
+                    0 <= index < len(product.guide)
+                    for index in product.illustration_step_indexes
+                ),
                 product.label,
             )
 
@@ -353,6 +362,56 @@ class GatewayAssociationTests(IsolatedAsyncioTestCase):
             device, "Bouton A"
         )
 
+    async def test_groupable_association_is_armed_before_gateway_reply(self) -> None:
+        """The first radio frame must see its selected channel and friendly name."""
+        product = GROUPABLE_ASSOCIATION_BY_LABEL["TYXIA 1410"]
+        client = SimpleNamespace()
+        tydom_hub = object.__new__(Hub)
+        tydom_hub._association_profile = "official:remote_X3D_direct"
+        tydom_hub._association_category = product.category
+        tydom_hub._association_product = product.label
+        tydom_hub._association_channel = product.channels[0].label
+        tydom_hub._association_name = "Telecommande AMG"
+        tydom_hub._pending_association_name = None
+        tydom_hub._pending_association_known_device_ids = set()
+        tydom_hub._pending_groupable_association = None
+        tydom_hub._pending_groupable_name = None
+        tydom_hub._pending_groupable_known_device_ids = set()
+        tydom_hub._pending_groupable_candidate_device_id = None
+        tydom_hub._pending_groupable_auto_finalize_failed = False
+        tydom_hub._tydom_client = client
+        tydom_hub.devices = {
+            "existing_remote": SimpleNamespace(),
+            "generic_product": object.__new__(TydomDevice),
+        }
+        tydom_hub._entry = SimpleNamespace(entry_id="entry")
+        tydom_hub._is_association_choice_supported = MagicMock(return_value=True)
+        tydom_hub._is_groupable_product_supported = MagicMock(return_value=True)
+        tydom_hub._selected_groupable_product = MagicMock(return_value=product)
+
+        async def gateway_reply(*_args) -> dict[str, str]:
+            self.assertEqual(
+                tydom_hub._pending_groupable_association,
+                (product, product.channels[0].label),
+            )
+            self.assertEqual(tydom_hub._pending_groupable_name, "Telecommande AMG")
+            self.assertTrue(client._allow_configless_remote_discovery)
+            self.assertEqual(
+                client._configless_remote_known_endpoint_ids,
+                {"existing_remote", "generic_product"},
+            )
+            self.assertEqual(
+                client._configless_remote_generic_endpoint_ids,
+                {"generic_product"},
+            )
+            return {"profile": "remote"}
+
+        with patch(
+            "custom_components.deltadore_tydom.hub.start_product_association",
+            side_effect=gateway_reply,
+        ):
+            await tydom_hub.start_selected_product_association()
+
     def test_completed_tyxia_replaces_its_temporary_radio_name(self) -> None:
         """The device page must never retain the discovery-only X3D label."""
         tydom_hub = object.__new__(Hub)
@@ -362,7 +421,9 @@ class GatewayAssociationTests(IsolatedAsyncioTestCase):
         registry = MagicMock()
         registry.async_get_device.return_value = entry
 
-        with patch("custom_components.deltadore_tydom.hub.dr.async_get", return_value=registry):
+        with patch(
+            "custom_components.deltadore_tydom.hub.dr.async_get", return_value=registry
+        ):
             tydom_hub._rename_new_groupable_device(
                 device, "Interrupteur 1", "TYXIA 2600"
             )
@@ -394,7 +455,9 @@ class GatewayAssociationTests(IsolatedAsyncioTestCase):
         bus.async_fire.assert_called_once()
         event, payload = bus.async_fire.call_args.args
         self.assertEqual(event, "deltadore_tydom_association_guide")
-        self.assertEqual(payload["title"], "TYXIA 2600 — guide d'association (Bouton A)")
+        self.assertEqual(
+            payload["title"], "TYXIA 2600 — guide d'association (Bouton A)"
+        )
         self.assertEqual(payload["instructions"], ["1. Préparez le bouton A."])
         self.assertEqual(len(payload["illustrations"]), 1)
         self.assertTrue(payload["illustrations"][0].startswith("data:image/svg+xml"))
@@ -414,9 +477,7 @@ class GatewayAssociationTests(IsolatedAsyncioTestCase):
 
     def test_tyxia_4000_series_retains_its_official_visuals(self) -> None:
         """Keep complete official vectors, including the receiver outline."""
-        _, steps, stepwise = get_association_illustration_layout(
-            "7_Tyxia_serie4000"
-        )
+        _, steps, stepwise = get_association_illustration_layout("7_Tyxia_serie4000")
 
         self.assertTrue(stepwise)
         self.assertEqual(
@@ -461,9 +522,7 @@ class GatewayAssociationTests(IsolatedAsyncioTestCase):
         tydom_hub._association_profile = "official:sensor_X3D_direct"
         tydom_hub._id = "gateway"
         tydom_hub.devices = {
-            "gateway": SimpleNamespace(
-                mainReference="21800010", productName="TYDOM1"
-            )
+            "gateway": SimpleNamespace(mainReference="21800010", productName="TYDOM1")
         }
 
         self.assertNotIn("Tysense Sun", tydom_hub.association_product_labels)
@@ -588,9 +647,7 @@ class GatewayAssociationTests(IsolatedAsyncioTestCase):
         )
         self.assertIn(
             "<svg",
-            get_association_illustration_svg(
-                tydom_hub.association_illustration_ids[0]
-            ),
+            get_association_illustration_svg(tydom_hub.association_illustration_ids[0]),
         )
         self.assertIn(
             "Lancer l'écoute de la passerelle",
@@ -738,9 +795,7 @@ class GatewayAssociationTests(IsolatedAsyncioTestCase):
             "groups": [
                 {
                     "id": 84,
-                    "devices": [
-                        {"id": 42, "endpoints": [{"id": 1}, {"id": 2}]}
-                    ],
+                    "devices": [{"id": 42, "endpoints": [{"id": 1}, {"id": 2}]}],
                 }
             ]
         }
@@ -881,9 +936,7 @@ class GatewayAssociationTests(IsolatedAsyncioTestCase):
                         "groups": [
                             {
                                 "id": 84,
-                                "devices": [
-                                    {"id": 43, "endpoints": [{"id": 2}]}
-                                ],
+                                "devices": [{"id": 43, "endpoints": [{"id": 2}]}],
                             }
                         ]
                     },
@@ -1179,7 +1232,9 @@ class GatewayAssociationTests(IsolatedAsyncioTestCase):
         self.assertEqual(group["widget_behavior"]["tutorial_id"], "tl2000")
         self.assertEqual(calls[1][0], "groups")
 
-    async def test_groupable_product_uses_the_requested_name_for_new_group(self) -> None:
+    async def test_groupable_product_uses_the_requested_name_for_new_group(
+        self,
+    ) -> None:
         """A name entered before pairing becomes the TYDOM group name."""
         config = {"endpoints": [], "groups": []}
         groups = {"groups": []}
@@ -1348,9 +1403,7 @@ class GatewayAssociationTests(IsolatedAsyncioTestCase):
         registry = MagicMock()
         registry.async_get_entity_id.return_value = "button.c3_dissociation"
         registry.async_get.return_value = SimpleNamespace(disabled_by="integration")
-        button = HADeviceRemovalButton(
-            SimpleNamespace(device_id="c3", _id="c3"), None
-        )
+        button = HADeviceRemovalButton(SimpleNamespace(device_id="c3", _id="c3"), None)
 
         with patch(
             "homeassistant.helpers.entity_registry.async_get",
@@ -1384,9 +1437,7 @@ class GatewayAssociationTests(IsolatedAsyncioTestCase):
             "homeassistant.helpers.entity_registry.async_get",
             return_value=registry,
         ):
-            hub._enable_existing_removal_buttons(
-                [HADeviceRemovalButton(gateway, None)]
-            )
+            hub._enable_existing_removal_buttons([HADeviceRemovalButton(gateway, None)])
 
         registry.async_get_entity_id.assert_called_once()
         registry.async_update_entity.assert_called_once()
