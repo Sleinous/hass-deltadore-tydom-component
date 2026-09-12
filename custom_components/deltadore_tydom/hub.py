@@ -1097,20 +1097,57 @@ async def remove_product_association(device) -> None:
             and str(endpoint.get("id_device")) == device_id
             and str(endpoint.get("id_endpoint")) == endpoint_id
         ]
-        device_endpoints = [
-            endpoint
-            for endpoint in endpoints
-            if isinstance(endpoint, dict)
-            and str(endpoint.get("id_device")) == device_id
-        ]
         if len(matching_endpoints) != 1:
             raise ValueError("The selected button is no longer configured")
 
-        # A two- (or multi-) button remote remains paired until its final
-        # configured button is removed.  This mirrors the official app: remove
-        # the selected endpoint from both configuration documents, but never
-        # issue a radio DELETE for the physical remote at this stage.
-        if len(device_endpoints) > 1:
+        # The association group, rather than an assumption that every button
+        # shares one device id, is the source of truth for sibling buttons.
+        # This also covers every multi-channel remote/control format handled
+        # by the official application.
+        configured_siblings = {
+            (str(endpoint.get("id_device")), str(endpoint.get("id_endpoint")))
+            for endpoint in endpoints
+            if isinstance(endpoint, dict)
+            and str(endpoint.get("id_device")) == device_id
+        }
+        membership = None
+        if association_group_id is not None:
+            group_id = str(association_group_id)
+            membership = next(
+                (
+                    group
+                    for group in group_memberships
+                    if isinstance(group, dict) and str(group.get("id")) == group_id
+                ),
+                None,
+            )
+            if membership is None:
+                raise ValueError(
+                    "The dedicated association group is no longer present on the gateway"
+                )
+            configured_siblings = {
+                (str(member.get("id")), str(member_endpoint.get("id")))
+                for member in membership.get("devices", [])
+                if isinstance(member, dict)
+                for member_endpoint in member.get("endpoints", [])
+                if isinstance(member_endpoint, dict)
+                and any(
+                    isinstance(endpoint, dict)
+                    and str(endpoint.get("id_device")) == str(member.get("id"))
+                    and str(endpoint.get("id_endpoint"))
+                    == str(member_endpoint.get("id"))
+                    for endpoint in endpoints
+                )
+            }
+            if (device_id, endpoint_id) not in configured_siblings:
+                raise ValueError(
+                    "The selected button is no longer part of its association group"
+                )
+
+        # A multi-button product remains paired until its final configured
+        # button is removed. Remove only the selected reference from both
+        # documents; do not issue a radio DELETE at this stage.
+        if len(configured_siblings) > 1:
             updated_config = copy.deepcopy(config)
             updated_config["endpoints"] = [
                 endpoint
@@ -1119,9 +1156,8 @@ async def remove_product_association(device) -> None:
             ]
 
             updated_groups = copy.deepcopy(groups)
-            if association_group_id is not None:
-                group_id = str(association_group_id)
-                membership = next(
+            if membership is not None:
+                updated_membership = next(
                     (
                         group
                         for group in updated_groups["groups"]
@@ -1129,14 +1165,14 @@ async def remove_product_association(device) -> None:
                     ),
                     None,
                 )
-                if membership is None:
+                if updated_membership is None:
                     raise ValueError(
                         "The dedicated association group is no longer present on the gateway"
                     )
                 device_membership = next(
                     (
                         member
-                        for member in membership.get("devices", [])
+                        for member in updated_membership.get("devices", [])
                         if isinstance(member, dict)
                         and str(member.get("id")) == device_id
                     ),
@@ -1148,7 +1184,7 @@ async def remove_product_association(device) -> None:
                     raise ValueError(
                         "The selected button is no longer part of its association group"
                     )
-                device_membership["endpoints"] = [
+                retained_endpoints = [
                     member_endpoint
                     for member_endpoint in device_membership["endpoints"]
                     if not (
@@ -1156,6 +1192,17 @@ async def remove_product_association(device) -> None:
                         and str(member_endpoint.get("id")) == endpoint_id
                     )
                 ]
+                if retained_endpoints:
+                    device_membership["endpoints"] = retained_endpoints
+                else:
+                    # A member without endpoints makes a related-endpoints
+                    # group invalid in TYDOM and moves the surviving channels
+                    # to "Non géré" in the official app.
+                    updated_membership["devices"] = [
+                        member
+                        for member in updated_membership["devices"]
+                        if member is not device_membership
+                    ]
 
             config_updated = False
             try:

@@ -827,6 +827,84 @@ class GatewayAssociationTests(IsolatedAsyncioTestCase):
         button = HADeviceRemovalButton(device, None)
         self.assertEqual(button._attr_name, "Dissocier le bouton 1")
 
+    async def test_button_removal_uses_group_siblings_and_drops_empty_member(
+        self,
+    ) -> None:
+        """Keep every groupable product intact when its buttons use separate ids."""
+        calls: list[tuple[str, object]] = []
+        config = {
+            "endpoints": [
+                {"id_device": 42, "id_endpoint": 1, "name": "Button 1"},
+                {"id_device": 43, "id_endpoint": 2, "name": "Button 2"},
+            ],
+            "groups": [{"id": 84, "type": "relatedendpoints"}],
+        }
+        groups = {
+            "groups": [
+                {
+                    "id": 84,
+                    "devices": [
+                        {"id": 42, "endpoints": [{"id": 1}]},
+                        {"id": 43, "endpoints": [{"id": 2}]},
+                    ],
+                }
+            ]
+        }
+
+        async def record_config(document: dict) -> None:
+            calls.append(("config", document))
+
+        async def record_groups(document: dict) -> None:
+            calls.append(("groups", document))
+
+        device = TydomRemoteControl(
+            SimpleNamespace(
+                get_config_file_document=AsyncMock(return_value=config),
+                get_groups_file_document=AsyncMock(return_value=groups),
+                post_config_file_document=record_config,
+                post_groups_file_document=record_groups,
+                delete_device=AsyncMock(),
+            ),
+            "42_1",
+            "42",
+            "Button 1",
+            "remoteControl",
+            "1",
+            None,
+            None,
+            {"physical_device_id": "42", "group_id": "84", "button_number": 1},
+        )
+
+        await remove_product_association(device)
+
+        self.assertEqual(
+            calls,
+            [
+                (
+                    "config",
+                    {
+                        "endpoints": [
+                            {"id_device": 43, "id_endpoint": 2, "name": "Button 2"}
+                        ],
+                        "groups": [{"id": 84, "type": "relatedendpoints"}],
+                    },
+                ),
+                (
+                    "groups",
+                    {
+                        "groups": [
+                            {
+                                "id": 84,
+                                "devices": [
+                                    {"id": 43, "endpoints": [{"id": 2}]}
+                                ],
+                            }
+                        ]
+                    },
+                ),
+            ],
+        )
+
     async def test_tyxia_2600_migrates_raw_single_button_to_visible_group(self) -> None:
         """A raw one-button discovery becomes one complete groupable product."""
         config = {
