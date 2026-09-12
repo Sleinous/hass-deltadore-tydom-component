@@ -1646,7 +1646,14 @@ class MessageHandler:
                         config_file_data is not None
                         and (not name_of_id or not type_of_id)
                         and _is_unconfigured_x3d_remote(unique_id, endpoint)
-                        and not _has_configured_remote_button(device_id)
+                        and (
+                            not _has_configured_remote_button(device_id)
+                            or getattr(
+                                self.tydom_client,
+                                "_allow_configless_remote_discovery",
+                                False,
+                            )
+                        )
                     ):
                         name_of_id = f"X3D remote control {device_id}"
                         type_of_id = "remoteControl"
