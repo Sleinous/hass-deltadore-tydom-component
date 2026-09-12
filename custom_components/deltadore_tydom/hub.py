@@ -2834,6 +2834,11 @@ class Hub:
         for button in buttons:
             if not isinstance(button, HADeviceRemovalButton):
                 continue
+            # The gateway's own destructive control is deliberately opt-in.
+            # Do not revive a registry entry that Home Assistant has correctly
+            # kept disabled by default.
+            if isinstance(button._device, Tydom):
+                continue
             entity_id = registry.async_get_entity_id("button", DOMAIN, button.unique_id)
             if entity_id is None:
                 continue

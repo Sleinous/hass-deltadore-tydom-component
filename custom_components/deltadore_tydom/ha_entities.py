@@ -6740,14 +6740,18 @@ class HADeviceAssociationButton(ButtonEntity, HAEntity):
 class HADeviceRemovalButton(HADeviceAssociationButton):
     """Control for permanently removing one product."""
 
-    _attr_entity_registry_enabled_default = True
-
     def __init__(self, device: TydomDevice, hass, removal_callback=None) -> None:
-        """Initialise an enabled permanent-removal control."""
+        """Initialise a permanent-removal control.
+
+        The gateway is the one exceptional device: removing it would sever the
+        entire integration, so keep that control opt-in.  Radio products remain
+        immediately removable by default.
+        """
         self.hass = hass
         self._device = device
         self._removal_callback = removal_callback
         self._attr_icon = "mdi:link-variant-remove"
+        self._attr_entity_registry_enabled_default = not isinstance(device, Tydom)
         if isinstance(device, (TydomInterrupter, TydomRemoteControl)):
             button_number = getattr(device, "button_number", None)
             self._attr_name = (
