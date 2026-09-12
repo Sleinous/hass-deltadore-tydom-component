@@ -104,6 +104,9 @@ class TestRemoteControl(IsolatedAsyncioTestCase):
             "groups_data",
             "endpoint_config",
             "remote_control_info",
+            "device_endpoint",
+            "device_tutorial_id",
+            "interrupter_endpoint_config",
         ):
             getattr(handler_module, mapping_name).clear()
         logger.reset_mock()
@@ -385,6 +388,56 @@ class TestRemoteControl(IsolatedAsyncioTestCase):
             },
             {"TYXIA 1410"},
         )
+
+    async def test_removed_remote_button_is_not_recreated_from_radio_data(self) -> None:
+        """A removed remote button stays absent while sibling buttons remain."""
+        device_id = 1693573310
+        endpoint_ids = await self._configure_remote(
+            device_id=device_id,
+            group_id=1558462107,
+            group_name="Télécommande C3",
+            tutorial_id="rcu_tyxia1410",
+            button_count=4,
+        )
+
+        configured_endpoints = handler_module.config_file_data["endpoints"][:3]
+        await self.handler.parse_config_data(
+            {
+                "endpoints": configured_endpoints,
+                "groups": handler_module.config_file_data["groups"],
+            },
+            None,
+        )
+        for endpoint_id in endpoint_ids:
+            handler_module.device_metadata[f"{endpoint_id}_{device_id}"] = {
+                "action": {"type": "string", "validity": "REMOTE"},
+            }
+
+        devices = await self.handler.parse_devices_data(
+            [
+                {
+                    "id": device_id,
+                    "endpoints": [
+                        {
+                            "id": endpoint_id,
+                            "error": 0,
+                            "data": [
+                                {
+                                    "name": "action",
+                                    "validity": "upToDate",
+                                    "value": "TOGGLE",
+                                }
+                            ],
+                        }
+                        for endpoint_id in endpoint_ids
+                    ],
+                }
+            ],
+            None,
+        )
+
+        self.assertEqual([device.button_number for device in devices], [1, 2, 3])
+        self.assertNotIn(f"{endpoint_ids[3]}_{device_id}", handler_module.device_name)
 
     async def test_only_fresh_non_idle_action_advances_event_sequence(self) -> None:
         """Polling without a fresh action must not repeat the previous press."""

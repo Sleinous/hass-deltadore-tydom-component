@@ -782,7 +782,7 @@ class GatewayAssociationTests(IsolatedAsyncioTestCase):
         )
 
         button = HADeviceRemovalButton(device, None)
-        self.assertEqual(button._attr_name, "Dissocier ce bouton")
+        self.assertEqual(button._attr_name, "Dissocier le bouton 1")
 
     async def test_tyxia_2600_migrates_raw_single_button_to_visible_group(self) -> None:
         """A raw one-button discovery becomes one complete groupable product."""
