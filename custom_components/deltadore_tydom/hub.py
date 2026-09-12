@@ -2322,10 +2322,34 @@ class Hub:
                     else:
                         # Check for collision: same device_id but different device
                         stored_device = self.devices[device.device_id]
+                        is_type_promotion = (
+                            type(stored_device) is TydomDevice
+                            and type(device) is not TydomDevice
+                        )
                         if stored_device is not device and (
-                            stored_device.device_name != device.device_name
+                            is_type_promotion
+                            or stored_device.device_name != device.device_name
                             or stored_device.device_type != device.device_type
                         ):
+                            # A product first seen by TYDOM as an unconfigured
+                            # ``Produit N`` is parsed as the generic base class.
+                            # During an explicit association we can subsequently
+                            # identify that same endpoint as a remote or wall
+                            # switch.  Updating only the generic object's name
+                            # and type loses its protocol-specific metadata, so
+                            # the association finalisation can never run.
+                            if is_type_promotion:
+                                STRUCTURED_LOGGER.device_operation(
+                                    "info",
+                                    "device_type_promoted",
+                                    device.device_id,
+                                    stored_type=stored_device.device_type,
+                                    promoted_type=device.device_type,
+                                )
+                                self.devices[device.device_id] = device
+                                await self.create_ha_device(device)
+                                continue
+
                             # Resolve collision: update stored device with new data
                             STRUCTURED_LOGGER.device_operation(
                                 "warning",
