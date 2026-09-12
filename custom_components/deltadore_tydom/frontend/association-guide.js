@@ -18,12 +18,14 @@ class DeltaDoreAssociationGuideDialog extends HTMLElement {
     overview,
     illustrations,
     illustration_mode: illustrationMode,
+    start_association_entity_id: startAssociationEntityId,
   }) {
     this._title = title;
     this._instructions = instructions;
     this._overview = overview;
     this._illustrations = illustrations;
     this._illustrationMode = illustrationMode;
+    this._startAssociationEntityId = startAssociationEntityId;
     this._render();
     this.shadowRoot.querySelector(".backdrop")?.classList.add("visible");
     this.shadowRoot.querySelector(".dialog")?.focus();
@@ -65,6 +67,7 @@ class DeltaDoreAssociationGuideDialog extends HTMLElement {
         main { padding: 20px 24px 28px; }
         ol { margin: 0; padding-left: 24px; }
         li { line-height: 1.45; margin: 0 0 14px; white-space: pre-line; }
+        .lead { line-height: 1.45; margin: 0 0 18px; }
         h3 { font-size: 18px; margin: 28px 0 14px; }
         figure { margin: 0 0 20px; text-align: center; }
         .overview { border-bottom: 1px solid var(--divider-color, #ddd); margin: 0 0 20px; padding-bottom: 16px; }
@@ -75,6 +78,14 @@ class DeltaDoreAssociationGuideDialog extends HTMLElement {
           padding: 20px;
         }
         figcaption { color: var(--secondary-text-color, #666); font-size: 13px; margin-top: 6px; }
+        .start-association {
+          background: var(--primary-color, #03a9f4); border-radius: 8px; color: var(--text-primary-color, #fff);
+          font-size: 15px; font-weight: 600; height: auto; line-height: 1.25; margin: 14px 0 0;
+          padding: 11px 16px; width: auto;
+        }
+        .start-association:hover { background: var(--primary-color, #03a9f4); filter: brightness(.92); }
+        .start-association:disabled { cursor: wait; opacity: .7; }
+        .action-status { color: var(--secondary-text-color, #666); display: block; font-size: 13px; margin-top: 8px; }
       </style>
       <div class="backdrop" role="presentation">
         <section class="dialog" role="dialog" aria-modal="true" aria-labelledby="guide-title" tabindex="-1">
@@ -115,10 +126,17 @@ class DeltaDoreAssociationGuideDialog extends HTMLElement {
       overview.hidden = false;
     }
     const instructionList = this.shadowRoot.querySelector(".instructions");
-    (this._instructions || []).forEach((instruction, index) => {
+    const instructions = [...(this._instructions || [])];
+    if (/^Parcours Home Assistant\s*[—-]/.test(instructions[0] || "")) {
+      const lead = document.createElement("p");
+      lead.className = "lead";
+      lead.textContent = instructions.shift();
+      instructionList.before(lead);
+    }
+    instructions.forEach((instruction, index) => {
       const item = document.createElement("li");
       item.textContent = instruction.replace(/^\d+\.\s*/, "");
-      if (this._illustrationMode === "steps" && this._illustrations?.[index]) {
+      if (this._illustrations?.[index]) {
         const figure = document.createElement("figure");
         figure.className = "step-illustration";
         const image = document.createElement("img");
@@ -129,27 +147,47 @@ class DeltaDoreAssociationGuideDialog extends HTMLElement {
         figure.append(image, caption);
         item.append(figure);
       }
+      if (
+        this._startAssociationEntityId
+        && instruction.includes("Lancer l'écoute de la passerelle")
+      ) {
+        const startButton = document.createElement("button");
+        startButton.className = "start-association";
+        startButton.type = "button";
+        startButton.textContent = "Lancer l'écoute de la passerelle";
+        const status = document.createElement("span");
+        status.className = "action-status";
+        startButton.addEventListener("click", async () => {
+          const hass = document.querySelector("home-assistant")?.hass;
+          if (!hass?.callService) return;
+          startButton.disabled = true;
+          status.textContent = "Écoute de la passerelle en cours…";
+          try {
+            await hass.callService("button", "press", {
+              entity_id: this._startAssociationEntityId,
+            });
+          } catch (error) {
+            startButton.disabled = false;
+            status.textContent = "Impossible de lancer l'écoute. Réessayez.";
+          }
+        });
+        item.append(startButton, status);
+      }
       instructionList.append(item);
     });
 
-    const remainingIllustrations = this._illustrationMode === "steps"
-      ? (this._illustrations || []).slice((this._instructions || []).length)
-      : (this._illustrations || []);
+    const remainingIllustrations = (this._illustrations || []).slice(instructions.length);
     if (remainingIllustrations.length) {
       const section = this.shadowRoot.querySelector(".illustrations");
       const sectionTitle = section.querySelector("h3");
       const images = this.shadowRoot.querySelector(".images");
-      sectionTitle.textContent = this._illustrationMode === "steps"
-        ? "Illustrations officielles complémentaires"
-        : "Illustrations officielles";
+      sectionTitle.textContent = "Illustrations officielles complémentaires";
       section.hidden = false;
       remainingIllustrations.forEach((source, index) => {
         const figure = document.createElement("figure");
         const image = document.createElement("img");
         image.src = source;
-        const stepNumber = this._illustrationMode === "steps"
-          ? (this._instructions || []).length + index + 1
-          : index + 1;
+        const stepNumber = instructions.length + index + 1;
         image.alt = `Illustration officielle de l'étape ${stepNumber}`;
         const caption = document.createElement("figcaption");
         caption.textContent = `Étape ${stepNumber}`;
