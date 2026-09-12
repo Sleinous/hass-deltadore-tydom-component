@@ -18,6 +18,7 @@ class DeltaDoreAssociationGuideDialog extends HTMLElement {
     overview,
     illustrations,
     illustration_mode: illustrationMode,
+    illustration_step_indexes: illustrationStepIndexes,
     start_association_entity_id: startAssociationEntityId,
   }) {
     this._title = title;
@@ -25,6 +26,7 @@ class DeltaDoreAssociationGuideDialog extends HTMLElement {
     this._overview = overview;
     this._illustrations = illustrations;
     this._illustrationMode = illustrationMode;
+    this._illustrationStepIndexes = illustrationStepIndexes;
     this._startAssociationEntityId = startAssociationEntityId;
     this._render();
     this.shadowRoot.querySelector(".backdrop")?.classList.add("visible");
@@ -136,11 +138,12 @@ class DeltaDoreAssociationGuideDialog extends HTMLElement {
     instructions.forEach((instruction, index) => {
       const item = document.createElement("li");
       item.textContent = instruction.replace(/^\d+\.\s*/, "");
-      if (this._illustrations?.[index]) {
+      const illustrationIndex = (this._illustrationStepIndexes || []).indexOf(index);
+      if (illustrationIndex >= 0 && this._illustrations?.[illustrationIndex]) {
         const figure = document.createElement("figure");
         figure.className = "step-illustration";
         const image = document.createElement("img");
-        image.src = this._illustrations[index];
+        image.src = this._illustrations[illustrationIndex];
         image.alt = `Illustration officielle de l'étape ${index + 1}`;
         const caption = document.createElement("figcaption");
         caption.textContent = `Illustration de l'étape ${index + 1}`;
@@ -176,7 +179,9 @@ class DeltaDoreAssociationGuideDialog extends HTMLElement {
       instructionList.append(item);
     });
 
-    const remainingIllustrations = (this._illustrations || []).slice(instructions.length);
+    const remainingIllustrations = (this._illustrations || []).filter(
+      (_source, index) => !(this._illustrationStepIndexes || []).includes(index),
+    );
     if (remainingIllustrations.length) {
       const section = this.shadowRoot.querySelector(".illustrations");
       const sectionTitle = section.querySelector("h3");
