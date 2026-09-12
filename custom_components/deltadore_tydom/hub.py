@@ -2263,28 +2263,48 @@ class Hub:
         self._pending_association_name = self._association_name or None
         self._pending_association_known_device_ids = set(self.devices)
         if product is not None:
-            # Snapshot before the LAN request: the receive loop may discover
-            # the product immediately after the gateway accepts it.
+            # The receive loop may discover the product before the /devices/
+            # install request has returned.  Arm its finalisation state before
+            # the LAN request so that first radio frame is never relegated to
+            # the manual "Configurer" fallback.
             self._pending_groupable_known_device_ids = set(self.devices)
-        try:
-            payload = await start_product_association(self, self._association_profile)
-        except Exception:
-            self._pending_groupable_known_device_ids.clear()
-            self._clear_pending_association_name()
-            raise
-        if product is not None:
-            self._pending_groupable_association = (product, self._association_channel)
+            self._pending_groupable_association = (
+                product,
+                self._association_channel,
+            )
             self._pending_groupable_name = self._association_name or None
             self._pending_groupable_candidate_device_id = None
             self._pending_groupable_auto_finalize_failed = False
-            # A button deliberately removed from one multi-button remote is
-            # absent from /configs/file. Permit exactly this pending workflow
-            # to surface its radio endpoint; normal presses stay hidden.
+            # Only expose a truly new endpoint (or one currently represented
+            # by a generic Produit N object).  A configuration refresh during
+            # listening must never turn every known remote into X3D remote
+            # control <id> candidates.
             self._tydom_client._allow_configless_remote_discovery = True
-        else:
+            self._tydom_client._configless_remote_known_endpoint_ids = set(self.devices)
+            self._tydom_client._configless_remote_generic_endpoint_ids = {
+                device_id
+                for device_id, device in self.devices.items()
+                if type(device) is TydomDevice
+            }
+        try:
+            payload = await start_product_association(self, self._association_profile)
+        except Exception:
+            self._pending_groupable_association = None
+            self._pending_groupable_name = None
+            self._pending_groupable_candidate_device_id = None
+            self._tydom_client._allow_configless_remote_discovery = False
+            self._tydom_client._configless_remote_known_endpoint_ids = set()
+            self._tydom_client._configless_remote_generic_endpoint_ids = set()
+            self._pending_groupable_known_device_ids.clear()
+            self._clear_pending_association_name()
+            raise
+        if product is None:
             self._pending_groupable_association = None
             self._pending_groupable_name = None
             self._pending_groupable_known_device_ids.clear()
+            self._tydom_client._allow_configless_remote_discovery = False
+            self._tydom_client._configless_remote_known_endpoint_ids = set()
+            self._tydom_client._configless_remote_generic_endpoint_ids = set()
         LOGGER.info(
             "Started gateway association for %s on config entry %s",
             payload,
@@ -3064,6 +3084,8 @@ class Hub:
             self._pending_groupable_candidate_device_id = None
             self._pending_groupable_auto_finalize_task = None
             self._tydom_client._allow_configless_remote_discovery = False
+            self._tydom_client._configless_remote_known_endpoint_ids = set()
+            self._tydom_client._configless_remote_generic_endpoint_ids = set()
             self._maybe_create_device_association_buttons(device)
 
     async def _finalize_groupable_product_association(
@@ -3088,6 +3110,8 @@ class Hub:
         self._pending_groupable_auto_finalize_failed = False
         self._pending_groupable_auto_finalize_task = None
         self._tydom_client._allow_configless_remote_discovery = False
+        self._tydom_client._configless_remote_known_endpoint_ids = set()
+        self._tydom_client._configless_remote_generic_endpoint_ids = set()
         LOGGER.info("Configured %s %s as %s", product.label, channel, name)
         await self.reload_devices_with_status()
 
