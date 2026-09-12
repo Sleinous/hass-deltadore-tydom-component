@@ -422,8 +422,8 @@ class GatewayAssociationTests(IsolatedAsyncioTestCase):
         self.assertEqual(tydom_hub.association_channel_labels, ())
         self.assertEqual(tydom_hub.association_instructions, ())
 
-    def test_tywell_only_sensors_are_hidden_on_legacy_tydom(self) -> None:
-        """Do not offer RE2020 sensor flows on a TYDOM 1 gateway."""
+    def test_tysense_sensors_are_hidden_on_tydom1_only(self) -> None:
+        """Do not offer the observed dead-end on TYDOM 1 only."""
         tydom_hub = object.__new__(Hub)
         tydom_hub._association_controls = []
         tydom_hub._association_category = "Capteurs"
@@ -438,7 +438,7 @@ class GatewayAssociationTests(IsolatedAsyncioTestCase):
         self.assertNotIn("Tysense Thermo", tydom_hub.association_product_labels)
         self.assertFalse(tydom_hub.association_product_supported)
 
-        tydom_hub.devices["gateway"].productName = "TYWELL PRO"
+        tydom_hub.devices["gateway"].productName = "TYWELL HOME"
 
         self.assertIn("Tysense Sun", tydom_hub.association_product_labels)
         self.assertIn("Tysense Thermo", tydom_hub.association_product_labels)
