@@ -7,6 +7,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 from custom_components.deltadore_tydom.hub import (
     ASSOCIATION_CATALOG,
     GROUPABLE_ASSOCIATION_BY_LABEL,
+    GROUPABLE_ASSOCIATION_PRODUCTS,
     OFFICIAL_DISCOVERY_PROFILES,
     configure_groupable_product,
     configure_tyxia_2600_interrupter,
@@ -151,6 +152,24 @@ class GatewayAssociationTests(IsolatedAsyncioTestCase):
             tydom_hub.association_instructions[9],
         )
 
+    def test_all_groupable_guides_expose_the_ha_listening_step(self) -> None:
+        """Every bespoke remote/switch guide can start association in HA."""
+        for product in GROUPABLE_ASSOCIATION_PRODUCTS:
+            self.assertTrue(
+                any("Lancer l'écoute de la passerelle" in step for step in product.guide),
+                product.label,
+            )
+            self.assertFalse(
+                any("Lorsque la confirmation est demandée" in step for step in product.guide),
+                product.label,
+            )
+
+        tydom_hub = object.__new__(Hub)
+        tydom_hub._association_controls = []
+        tydom_hub._association_category = "Interrupteurs"
+        tydom_hub._association_product = "TYXIA 2600"
+        tydom_hub._association_profile = "official:remote_X3D_direct"
+        tydom_hub._association_channel = "Bouton A"
         tydom_hub.set_association_channel("Bouton B")
 
         self.assertIn(
