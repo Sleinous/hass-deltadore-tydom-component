@@ -171,8 +171,7 @@ def _load_opening_consumed_attrs():
         if (
             isinstance(node, ast.Assign)
             and any(
-                isinstance(target, ast.Name)
-                and target.id == "_BINARY_OPEN_STATES"
+                isinstance(target, ast.Name) and target.id == "_BINARY_OPEN_STATES"
                 for target in node.targets
             )
         )
@@ -383,9 +382,7 @@ class EntitySensorRegistrationTests(TestCase):
     def test_binary_open_state_is_consumed(self) -> None:
         """A two-state openState adds nothing beyond the primary entity."""
         device = MagicMock()
-        device._metadata = {
-            "openState": {"enum_values": ["LOCKED", "UNLOCKED"]}
-        }
+        device._metadata = {"openState": {"enum_values": ["LOCKED", "UNLOCKED"]}}
 
         self.assertEqual(
             get_consumed_opening_attrs(device),
@@ -396,9 +393,7 @@ class EntitySensorRegistrationTests(TestCase):
         """French-window opening modes must remain separately observable."""
         device = MagicMock()
         device._metadata = {
-            "openState": {
-                "enum_values": ["LOCKED", "OPEN_FRENCH", "OPEN_HOPPER"]
-            }
+            "openState": {"enum_values": ["LOCKED", "OPEN_FRENCH", "OPEN_HOPPER"]}
         }
 
         self.assertEqual(
