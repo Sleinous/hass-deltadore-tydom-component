@@ -1062,21 +1062,14 @@ async def remove_product_association(device) -> None:
     ``relatedendpoints`` group (for example a TYXIA 2600): it leaves the
     group's configuration in the gateway.  The official application removes
     that group from both complete configuration files as well as deleting the
-    radio product.  Ordinary products are deliberately rejected here until
-    their references in user groups, scenarios and moments are handled too.
+    radio product.  Standalone products follow the same configuration-first
+    transaction: every endpoint is removed and every group membership is
+    cleaned before their radio product is deleted.
     """
     device_id = getattr(device, "_id", None)
     tydom_client = getattr(device, "_tydom_client", None)
     if device_id is None or tydom_client is None:
         raise ValueError("The selected entity does not expose a TYDOM device")
-    if getattr(device, "association_group_id", None) is None and not isinstance(
-        device, TydomInterrupter
-    ):
-        raise ValueError(
-            "Safe complete removal is not yet available for this product. "
-            "It may belong to user groups, scenarios or moments."
-        )
-
     config = await tydom_client.get_config_file_document()
     groups = await tydom_client.get_groups_file_document()
     config_groups = config.get("groups")
@@ -1227,49 +1220,92 @@ async def remove_product_association(device) -> None:
             return
 
     if association_group_id is None:
-        # The official app can configure a single TYXIA 2600 button as an
-        # interrupter without a related-endpoints group. It is safe to remove
-        # only when it is the sole configured endpoint and has no membership.
-        if not isinstance(device, TydomInterrupter):
-            raise ValueError(
-                "Safe complete removal is not yet available for this product. "
-                "It may belong to user groups, scenarios or moments."
-            )
-        endpoint_id = str(getattr(device, "_endpoint", ""))
+        # Standalone products may have one or several configuration endpoints.
+        # Remove every endpoint of the physical product and every membership
+        # reference before radio deletion. Empty related-endpoints groups are
+        # invalid in TYDOM, so their matching configuration records are also
+        # removed; user-defined groups are retained even when now empty.
         matching_endpoints = [
             endpoint
             for endpoint in endpoints
             if isinstance(endpoint, dict)
             and str(endpoint.get("id_device")) == device_id
         ]
-        referenced_by_group = any(
-            isinstance(group, dict)
-            and any(
-                isinstance(member, dict) and str(member.get("id")) == device_id
-                for member in group.get("devices", [])
-            )
-            for group in group_memberships
-        )
-        if (
-            len(matching_endpoints) != 1
-            or str(matching_endpoints[0].get("id_endpoint")) != endpoint_id
-            or referenced_by_group
-        ):
+        if not matching_endpoints:
             raise ValueError(
-                "Safe complete removal is only available for an isolated "
-                "TYXIA 2600 interrupter button"
+                "The selected product is no longer present in the gateway configuration"
             )
 
         updated_config = copy.deepcopy(config)
         updated_config["endpoints"] = [
-            endpoint for endpoint in endpoints if endpoint is not matching_endpoints[0]
+            endpoint for endpoint in endpoints if endpoint not in matching_endpoints
         ]
+
+        updated_groups = copy.deepcopy(groups)
+        emptied_group_ids: set[str] = set()
+        for membership in updated_groups["groups"]:
+            if not isinstance(membership, dict):
+                continue
+            members = membership.get("devices")
+            if not isinstance(members, list):
+                continue
+            retained_members = [
+                member
+                for member in members
+                if not (
+                    isinstance(member, dict)
+                    and str(member.get("id")) == device_id
+                )
+            ]
+            if len(retained_members) == len(members):
+                continue
+            membership["devices"] = retained_members
+            if not retained_members and membership.get("id") is not None:
+                emptied_group_ids.add(str(membership["id"]))
+
+        related_group_ids = {
+            str(group.get("id"))
+            for group in config_groups
+            if isinstance(group, dict)
+            and group.get("type") == "relatedendpoints"
+            and group.get("id") is not None
+        }
+        obsolete_group_ids = emptied_group_ids & related_group_ids
+        if obsolete_group_ids:
+            updated_config["groups"] = [
+                group
+                for group in config_groups
+                if not (
+                    isinstance(group, dict)
+                    and str(group.get("id")) in obsolete_group_ids
+                )
+            ]
+            updated_groups["groups"] = [
+                group
+                for group in updated_groups["groups"]
+                if not (
+                    isinstance(group, dict)
+                    and str(group.get("id")) in obsolete_group_ids
+                )
+            ]
+
+        config_updated = False
+        groups_updated = False
         await tydom_client.post_config_file_document(updated_config)
+        config_updated = True
         try:
+            await tydom_client.post_groups_file_document(updated_groups)
+            groups_updated = True
             await tydom_client.delete_device(device_id)
         except Exception:
+            if groups_updated:
+                try:
+                    await tydom_client.post_groups_file_document(groups)
+                except Exception:
+                    LOGGER.exception("Unable to restore /groups/file after failed removal")
             try:
-                await tydom_client.post_config_file_document(config)
+                if config_updated:
+                    await tydom_client.post_config_file_document(config)
             except Exception:
                 LOGGER.exception("Unable to restore /configs/file after failed removal")
             raise
