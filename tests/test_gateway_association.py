@@ -10,9 +10,11 @@ from custom_components.deltadore_tydom.hub import (
     GROUPABLE_ASSOCIATION_PRODUCTS,
     OFFICIAL_DISCOVERY_PROFILES,
     configure_groupable_product,
+    configure_standalone_product,
     configure_tyxia_2600_interrupter,
     get_association_choices,
     get_install_payload,
+    get_standalone_association_recipe,
     remove_product_association,
     start_product_association,
 )
@@ -85,6 +87,54 @@ class GatewayAssociationTests(IsolatedAsyncioTestCase):
         )
         self.assertIn(
             "official:light_X3D_x3d_rm", {choice.profile_id for choice in gate}
+        )
+
+    def test_standalone_recipe_uses_selected_category_not_radio_recipe(self) -> None:
+        """A TYXIA 4620 gate must not be configured as a light receiver."""
+        recipe = get_standalone_association_recipe("Portail")
+
+        self.assertIsNotNone(recipe)
+        self.assertEqual(recipe.usage, "gate")
+        self.assertEqual(recipe.picto, "picto_gate")
+
+    async def test_raw_standalone_product_is_promoted_to_gate_configuration(
+        self,
+    ) -> None:
+        """A raw Product N receives the selected app-visible configuration."""
+        original = {
+            "endpoints": [
+                {
+                    "id_device": 1789287717,
+                    "id_endpoint": 1789287717,
+                    "name": "Produit 2",
+                    "first_usage": "",
+                    "last_usage": "",
+                }
+            ]
+        }
+        client = SimpleNamespace(
+            get_config_file_document=AsyncMock(return_value=original),
+            post_config_file_document=AsyncMock(),
+        )
+        device = SimpleNamespace(
+            _id=1789287717,
+            _endpoint=1789287717,
+            _tydom_client=client,
+        )
+        recipe = get_standalone_association_recipe("Portail")
+
+        name = await configure_standalone_product(
+            device, recipe, "7_Tyxia_serie4000", "Portail Coulissant"
+        )
+
+        self.assertEqual(name, "Portail Coulissant")
+        posted = client.post_config_file_document.await_args.args[0]
+        self.assertEqual(posted["endpoints"][0]["name"], "Portail Coulissant")
+        self.assertEqual(posted["endpoints"][0]["first_usage"], "gate")
+        self.assertEqual(posted["endpoints"][0]["last_usage"], "gate")
+        self.assertEqual(
+            posted["endpoints"][0]["widget_behavior"],
+            {"tutorial_id": "7_Tyxia_serie4000"},
         )
 
     def test_catalog_matches_the_official_application_group_order(self) -> None:
