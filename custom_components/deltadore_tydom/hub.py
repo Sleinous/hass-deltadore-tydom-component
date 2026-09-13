@@ -163,6 +163,7 @@ class StandaloneAssociationRecipe:
     usage: str
     picto: str
     name_prefix: str
+    first_usage: str | None = None
 
 
 # These profiles are the request values used by the official TYDOM app. The
@@ -1004,9 +1005,23 @@ _STANDALONE_ASSOCIATION_RECIPES: tuple[tuple[str, StandaloneAssociationRecipe], 
     ("capteur", StandaloneAssociationRecipe("sensor", "picto_sensor5", "Capteur")),
 )
 
+# A few sensor profiles share the generic ``Capteurs`` discovery entry but
+# require a product-specific usage in /configs/file.  In particular, TYDOM
+# uses ``sensorSun`` (not the generic ``sensor``) to make a Tysense Sun a
+# managed solar probe in both the application and Home Assistant.
+_STANDALONE_ASSOCIATION_RECIPES_BY_PRODUCT: dict[str, StandaloneAssociationRecipe] = {
+    "Tysense Sun": StandaloneAssociationRecipe(
+        "sensorSun", "picto_sensor6", "Sonde Soleil", "sensor"
+    ),
+    "Tysense Thermo": StandaloneAssociationRecipe(
+        "sensorThermo", "picto_sensor5", "Sonde Température", "sensor"
+    ),
+}
+
 
 def get_standalone_association_recipe(
     category: str,
+    product_label: str | None = None,
 ) -> StandaloneAssociationRecipe | None:
     """Return the configuration recipe for a selected non-groupable category.
 
@@ -1014,6 +1029,9 @@ def get_standalone_association_recipe(
     legacy catalogue's mojibake accents while keeping the product selection
     itself fully data driven.
     """
+    if product_label in _STANDALONE_ASSOCIATION_RECIPES_BY_PRODUCT:
+        return _STANDALONE_ASSOCIATION_RECIPES_BY_PRODUCT[product_label]
+
     normalized = category.casefold()
     return next(
         (
@@ -1744,7 +1762,21 @@ async def configure_standalone_product(
         ),
         None,
     )
-    if endpoint is not None and endpoint.get("last_usage"):
+    # Repair the exact generic Tysense Sun entry written by older association
+    # code.  It is unambiguously identified by the official tutorial and is
+    # the only already-configured endpoint this helper may rewrite.
+    is_tysense_sun_repair = (
+        recipe.usage == "sensorSun"
+        and endpoint is not None
+        and endpoint.get("last_usage") == "sensor"
+        and isinstance(endpoint.get("widget_behavior"), dict)
+        and endpoint["widget_behavior"].get("tutorial_id") == "tysense_sun"
+    )
+    if (
+        endpoint is not None
+        and endpoint.get("last_usage")
+        and not is_tysense_sun_repair
+    ):
         raise ValueError("The discovered endpoint is already configured")
 
     requested_name = " ".join((name_override or "").split())
@@ -1754,7 +1786,7 @@ async def configure_standalone_product(
         "id_endpoint": int(endpoint_id),
         "name": name,
         "picto": recipe.picto,
-        "first_usage": recipe.usage,
+        "first_usage": recipe.first_usage or recipe.usage,
         "last_usage": recipe.usage,
         "anticipation_start": False,
         "skill": "TYDOM_X3D",
@@ -2458,7 +2490,9 @@ class Hub:
         standalone_recipe = (
             None
             if product is not None
-            else get_standalone_association_recipe(self._association_category)
+            else get_standalone_association_recipe(
+                self._association_category, self._association_product
+            )
         )
         if standalone_recipe is not None:
             self._pending_standalone_association = (
@@ -2488,7 +2522,15 @@ class Hub:
                 device
                 for device in self.devices.values()
                 if type(device) is TydomDevice
-                and str(getattr(device, "device_name", "")).startswith("Produit ")
+                and (
+                    str(getattr(device, "device_name", "")).startswith("Produit ")
+                    or (
+                        standalone_recipe.usage == "sensorSun"
+                        and device.device_type == "sensor"
+                        and getattr(device, "configSensor", None) == 8
+                        and hasattr(device, "lightPower")
+                    )
+                )
             ]
             recovered_standalone = (
                 raw_candidates[0] if len(raw_candidates) == 1 else None
