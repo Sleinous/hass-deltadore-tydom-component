@@ -733,12 +733,96 @@ class GatewayAssociationTests(IsolatedAsyncioTestCase):
 
         self.assertEqual(remote_client.payloads, [payload])
 
-    async def test_removal_rejects_products_without_a_dedicated_group(self) -> None:
-        """Potentially shared products must not be removed incompletely."""
-        device = SimpleNamespace(_id="42", _tydom_client=SimpleNamespace())
+    async def test_removal_rejects_a_product_missing_from_configuration(self) -> None:
+        """Never issue a radio delete for a configuration-less product."""
+        device = SimpleNamespace(
+            _id="42",
+            _tydom_client=SimpleNamespace(
+                get_config_file_document=AsyncMock(
+                    return_value={"endpoints": [], "groups": []}
+                ),
+                get_groups_file_document=AsyncMock(return_value={"groups": []}),
+            ),
+        )
 
-        with self.assertRaisesRegex(ValueError, "not yet available"):
+        with self.assertRaisesRegex(ValueError, "no longer present"):
             await remove_product_association(device)
+
+    async def test_standalone_product_removal_cleans_memberships_then_radio(
+        self,
+    ) -> None:
+        """A gate-style product is removed without a model-specific branch."""
+        calls: list[tuple[str, object]] = []
+        config = {
+            "endpoints": [
+                {"id_device": 42, "id_endpoint": 1},
+                {"id_device": 42, "id_endpoint": 2},
+                {"id_device": 43, "id_endpoint": 1},
+            ],
+            "groups": [
+                {"id": 80, "type": "group"},
+                {"id": 81, "type": "relatedendpoints"},
+            ],
+        }
+        groups = {
+            "groups": [
+                {
+                    "id": 80,
+                    "devices": [
+                        {"id": 42, "endpoints": [{"id": 1}, {"id": 2}]},
+                        {"id": 43, "endpoints": [{"id": 1}]},
+                    ],
+                },
+                {"id": 81, "devices": [{"id": 42, "endpoints": [{"id": 1}]}]},
+            ]
+        }
+
+        async def record_config(document: dict) -> None:
+            calls.append(("config", document))
+
+        async def record_groups(document: dict) -> None:
+            calls.append(("groups", document))
+
+        async def delete_device(device_id: str) -> None:
+            calls.append(("device", device_id))
+
+        device = SimpleNamespace(
+            _id="42",
+            _tydom_client=SimpleNamespace(
+                get_config_file_document=AsyncMock(return_value=config),
+                get_groups_file_document=AsyncMock(return_value=groups),
+                post_config_file_document=record_config,
+                post_groups_file_document=record_groups,
+                delete_device=delete_device,
+            ),
+        )
+
+        await remove_product_association(device)
+
+        self.assertEqual(
+            calls,
+            [
+                (
+                    "config",
+                    {
+                        "endpoints": [{"id_device": 43, "id_endpoint": 1}],
+                        "groups": [{"id": 80, "type": "group"}],
+                    },
+                ),
+                (
+                    "groups",
+                    {
+                        "groups": [
+                            {
+                                "id": 80,
+                                "devices": [{"id": 43, "endpoints": [{"id": 1}]}],
+                            }
+                        ]
+                    },
+                ),
+                ("device", "42"),
+            ],
+        )
 
     async def test_interrupter_removal_updates_both_files_before_the_product(
         self,
@@ -1341,6 +1425,9 @@ class GatewayAssociationTests(IsolatedAsyncioTestCase):
         async def post_config_file_document(document: dict) -> None:
             calls.append(("config", document))
 
+        async def post_groups_file_document(document: dict) -> None:
+            calls.append(("groups", document))
+
         async def delete_device(device_id: str) -> None:
             calls.append(("device", device_id))
 
@@ -1349,6 +1436,7 @@ class GatewayAssociationTests(IsolatedAsyncioTestCase):
                 get_config_file_document=get_config_file_document,
                 get_groups_file_document=get_groups_file_document,
                 post_config_file_document=post_config_file_document,
+                post_groups_file_document=post_groups_file_document,
                 delete_device=delete_device,
             ),
             "84_42",
@@ -1364,7 +1452,12 @@ class GatewayAssociationTests(IsolatedAsyncioTestCase):
         await remove_product_association(device)
 
         self.assertEqual(
-            calls, [("config", {"endpoints": [], "groups": []}), ("device", "42")]
+            calls,
+            [
+                ("config", {"endpoints": [], "groups": []}),
+                ("groups", {"groups": []}),
+                ("device", "42"),
+            ],
         )
 
     async def test_device_removal_button_is_enabled_and_removes_its_product(
