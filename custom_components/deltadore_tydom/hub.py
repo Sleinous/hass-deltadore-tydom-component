@@ -875,7 +875,6 @@ OFFICIAL_ASSOCIATION_CATALOG: dict[str, tuple[AssociationChoice, ...]] = {
         AssociationChoice("TYPASS ATL", "official:typassATL_X3D_direct"),
         AssociationChoice("TYPASS CHX", "official:typassATL_X3D_direct"),
         AssociationChoice("TYPASS SD", "official:typassSaunier_X3D_direct"),
-        AssociationChoice("Tysense Thermo", "official:temperature_X3D_direct"),
         AssociationChoice("TYWATT 1000", "official:rt2012_noOutTemp_X3D_x3d_pped"),
         AssociationChoice("TYWATT 2000", "official:rt2012_X3D_x3d_pped"),
         AssociationChoice("TYWATT 5100", "official:meter_X3D_direct"),
