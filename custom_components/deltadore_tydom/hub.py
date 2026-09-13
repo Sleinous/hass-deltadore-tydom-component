@@ -150,6 +150,21 @@ class GroupableAssociationProduct:
     illustration_step_indexes: tuple[int, ...]
 
 
+@dataclass(frozen=True, slots=True)
+class StandaloneAssociationRecipe:
+    """Configuration written for a newly discovered one-endpoint product.
+
+    The gateway discovery request only opens the radio listening window.  On
+    current TYDOM firmware it can leave the successfully paired endpoint as
+    an untyped ``Produit N`` until the application writes its usage to
+    ``/configs/file``.  These recipes represent that second, local step.
+    """
+
+    usage: str
+    picto: str
+    name_prefix: str
+
+
 # These profiles are the request values used by the official TYDOM app. The
 # gateway stays authoritative and accepts only values supported by its firmware.
 DISCOVERY_PROFILES: dict[str, DiscoveryProfile] = {
@@ -961,6 +976,56 @@ DISCOVERY_PROFILES.update(OFFICIAL_DISCOVERY_PROFILES)
 ASSOCIATION_CATALOG = OFFICIAL_ASSOCIATION_CATALOG
 
 
+# A selected category is the usage the official application ultimately writes
+# for a one-endpoint product.  Keep this independent from the radio profile:
+# TYXIA 4620, for example, uses the same X3D radio recipe as a light receiver
+# but is a ``gate`` when selected under ``Portail``.
+_STANDALONE_ASSOCIATION_RECIPES: tuple[tuple[str, StandaloneAssociationRecipe], ...] = (
+    ("volet", StandaloneAssociationRecipe("shutter", "picto_shutter", "Volet")),
+    ("clairage", StandaloneAssociationRecipe("light", "picto_lamp", "Éclairage")),
+    (
+        "therm",
+        StandaloneAssociationRecipe("electric", "picto_thermometer", "Thermique"),
+    ),
+    (
+        "garage",
+        StandaloneAssociationRecipe("garage_door", "picto_sectional_door", "Garage"),
+    ),
+    ("portail", StandaloneAssociationRecipe("gate", "picto_gate", "Portail")),
+    ("alarme", StandaloneAssociationRecipe("alarm", "picto_alarm", "Alarme")),
+    (
+        "consommation",
+        StandaloneAssociationRecipe("conso", "picto_conso", "Consommation"),
+    ),
+    ("porte", StandaloneAssociationRecipe("belmDoor", "picto_belmdoor", "Porte")),
+    ("fen", StandaloneAssociationRecipe("windowFrench", "picto_window", "Fenêtre")),
+    ("store", StandaloneAssociationRecipe("awning", "picto_awning_awning", "Store")),
+    ("prise", StandaloneAssociationRecipe("plug", "default_device", "Prise")),
+    ("autres", StandaloneAssociationRecipe("light", "default_device", "Appareil")),
+    ("capteur", StandaloneAssociationRecipe("sensor", "picto_sensor5", "Capteur")),
+)
+
+
+def get_standalone_association_recipe(
+    category: str,
+) -> StandaloneAssociationRecipe | None:
+    """Return the configuration recipe for a selected non-groupable category.
+
+    Matching by the stable French category stem deliberately tolerates the
+    legacy catalogue's mojibake accents while keeping the product selection
+    itself fully data driven.
+    """
+    normalized = category.casefold()
+    return next(
+        (
+            recipe
+            for stem, recipe in _STANDALONE_ASSOCIATION_RECIPES
+            if stem in normalized
+        ),
+        None,
+    )
+
+
 def get_association_choices(category: str) -> tuple[AssociationChoice, ...]:
     """Return the product families available under one displayed category."""
     try:
@@ -1625,6 +1690,97 @@ async def configure_tyxia_2600_interrupter(device, channel: str) -> str:
     )
 
 
+def _next_standalone_product_name(
+    config: dict[str, object], recipe: StandaloneAssociationRecipe
+) -> str:
+    """Return a readable unused name instead of retaining ``Produit N``."""
+    used_names = {
+        str(endpoint.get("name"))
+        for endpoint in config.get("endpoints", [])
+        if isinstance(endpoint, dict)
+    }
+    number = 1
+    while f"{recipe.name_prefix} {number}" in used_names:
+        number += 1
+    return f"{recipe.name_prefix} {number}"
+
+
+async def configure_standalone_product(
+    device,
+    recipe: StandaloneAssociationRecipe,
+    tutorial_id: str | None,
+    name_override: str | None = None,
+) -> str:
+    """Turn one raw radio discovery into an application-managed product.
+
+    This is intentionally restricted to a fresh, otherwise untyped endpoint.
+    It never changes an already configured product such as a Tywatt meter,
+    thermostat, or remote control; those retain the gateway's own metadata.
+    """
+    device_id = str(getattr(device, "_id", ""))
+    endpoint_id = str(getattr(device, "_endpoint", ""))
+    tydom_client = getattr(device, "_tydom_client", None)
+    get_config = getattr(tydom_client, "get_config_file_document", None)
+    post_config = getattr(tydom_client, "post_config_file_document", None)
+    if (
+        not device_id
+        or not endpoint_id
+        or not callable(get_config)
+        or not callable(post_config)
+    ):
+        raise ValueError("The discovered endpoint cannot be configured safely")
+
+    config = await get_config()
+    endpoints = config.get("endpoints") if isinstance(config, dict) else None
+    if not isinstance(endpoints, list):
+        raise TypeError("The gateway returned a malformed /configs/file document")
+
+    endpoint = next(
+        (
+            item
+            for item in endpoints
+            if isinstance(item, dict)
+            and str(item.get("id_device")) == device_id
+            and str(item.get("id_endpoint")) == endpoint_id
+        ),
+        None,
+    )
+    if endpoint is None:
+        raise ValueError(
+            "The discovered endpoint is no longer in gateway configuration"
+        )
+    if endpoint.get("last_usage"):
+        raise ValueError("The discovered endpoint is already configured")
+
+    requested_name = " ".join((name_override or "").split())
+    name = requested_name or _next_standalone_product_name(config, recipe)
+    configured_endpoint = {
+        "id_device": int(device_id),
+        "id_endpoint": int(endpoint_id),
+        "name": name,
+        "picto": recipe.picto,
+        "first_usage": recipe.usage,
+        "last_usage": recipe.usage,
+        "anticipation_start": False,
+        "skill": "TYDOM_X3D",
+        "space_id": "",
+    }
+    if tutorial_id:
+        configured_endpoint["widget_behavior"] = {"tutorial_id": tutorial_id}
+
+    updated_config = copy.deepcopy(config)
+    for item in updated_config["endpoints"]:
+        if (
+            isinstance(item, dict)
+            and str(item.get("id_device")) == device_id
+            and str(item.get("id_endpoint")) == endpoint_id
+        ):
+            item.update(configured_endpoint)
+            break
+    await post_config(updated_config)
+    return name
+
+
 class Hub:
     """Hub for Delta Dore Tydom."""
 
@@ -1714,6 +1870,13 @@ class Hub:
         self._pending_groupable_auto_finalize_failed = False
         self._pending_association_name: str | None = None
         self._pending_association_known_device_ids: set[str] = set()
+        self._pending_standalone_association: (
+            tuple[StandaloneAssociationRecipe, str | None] | None
+        ) = None
+        self._pending_standalone_known_device_ids: set[str] = set()
+        self._pending_standalone_candidate_device_id: str | None = None
+        self._pending_standalone_auto_finalize_task: asyncio.Task[None] | None = None
+        self._pending_standalone_auto_finalize_failed = False
         self._refresh_energy_buttons_created: set[str] = set()
         self._device_association_buttons_created: set[tuple[str, str]] = set()
         self._remote_battery_entities: dict[str, HARemoteBattery] = {}
@@ -2289,6 +2452,43 @@ class Hub:
         product = self._selected_groupable_product()
         self._pending_association_name = self._association_name or None
         self._pending_association_known_device_ids = set(self.devices)
+        standalone_recipe = (
+            None
+            if product is not None
+            else get_standalone_association_recipe(self._association_category)
+        )
+        if standalone_recipe is not None:
+            self._pending_standalone_association = (
+                standalone_recipe,
+                get_official_association_tutorial_id(
+                    self._association_product, self._association_category
+                ),
+            )
+            self._pending_standalone_known_device_ids = set(self.devices)
+            self._pending_standalone_candidate_device_id = None
+            self._pending_standalone_auto_finalize_failed = False
+            # A previous version could leave exactly one radio-successful
+            # endpoint as ``Produit N``.  Adopt that explicit raw placeholder
+            # when the user starts the matching workflow again; do not guess
+            # when several unconfigured products exist.
+            raw_candidates = [
+                device
+                for device in self.devices.values()
+                if type(device) is TydomDevice
+                and str(getattr(device, "device_name", "")).startswith("Produit ")
+            ]
+            recovered_standalone = (
+                raw_candidates[0] if len(raw_candidates) == 1 else None
+            )
+            if recovered_standalone is not None:
+                self._pending_standalone_known_device_ids.discard(
+                    recovered_standalone.device_id
+                )
+                self._pending_standalone_candidate_device_id = (
+                    recovered_standalone.device_id
+                )
+        else:
+            recovered_standalone = None
         if product is not None:
             # The receive loop may discover the product before the /devices/
             # install request has returned.  Arm its finalisation state before
@@ -2323,6 +2523,7 @@ class Hub:
             self._tydom_client._configless_remote_known_endpoint_ids = set()
             self._tydom_client._configless_remote_generic_endpoint_ids = set()
             self._pending_groupable_known_device_ids.clear()
+            self._clear_pending_standalone_association()
             self._clear_pending_association_name()
             raise
         if product is None:
@@ -2332,6 +2533,10 @@ class Hub:
             self._tydom_client._allow_configless_remote_discovery = False
             self._tydom_client._configless_remote_known_endpoint_ids = set()
             self._tydom_client._configless_remote_generic_endpoint_ids = set()
+        if recovered_standalone is not None:
+            self._pending_standalone_auto_finalize_task = self._hass.async_create_task(
+                self._async_auto_finalize_standalone_product(recovered_standalone)
+            )
         LOGGER.info(
             "Started gateway association for %s on config entry %s",
             payload,
@@ -2951,6 +3156,37 @@ class Hub:
         if registry_device_id != device.device_id:
             return
 
+        pending_standalone = getattr(self, "_pending_standalone_association", None)
+        pending_standalone_known_device_ids = getattr(
+            self, "_pending_standalone_known_device_ids", set()
+        )
+        is_new_standalone_candidate = (
+            pending_standalone is not None
+            and type(device) is TydomDevice
+            and device.device_id not in pending_standalone_known_device_ids
+        )
+        if (
+            is_new_standalone_candidate
+            and not getattr(self, "_pending_standalone_auto_finalize_failed", False)
+            and getattr(self, "_pending_standalone_candidate_device_id", None) is None
+        ):
+            # A raw ``Produit N`` must be promoted before HA exposes its
+            # generic controls.  Delay one loop iteration for the gateway to
+            # finish publishing the matching endpoint metadata.
+            self._pending_standalone_candidate_device_id = device.device_id
+            self._pending_standalone_auto_finalize_task = self._hass.async_create_task(
+                self._async_auto_finalize_standalone_product(device)
+            )
+            return
+        if (
+            pending_standalone is not None
+            and device.device_id not in pending_standalone_known_device_ids
+            and type(device) is not TydomDevice
+        ):
+            # Products such as Tywatt publish their definitive configuration
+            # themselves.  Never overwrite that gateway-owned metadata.
+            self._clear_pending_standalone_association()
+
         self._maybe_apply_pending_association_name(device)
 
         buttons = []
@@ -3100,6 +3336,44 @@ class Hub:
         await remove_product_association(device)
         await self.reload_devices_with_status()
 
+    async def _async_auto_finalize_standalone_product(
+        self, device: TydomDevice
+    ) -> None:
+        """Write the selected usage for one newly discovered raw endpoint."""
+        await asyncio.sleep(1)
+        pending = self._pending_standalone_association
+        if (
+            pending is None
+            or self._pending_standalone_auto_finalize_failed
+            or self._pending_standalone_candidate_device_id != device.device_id
+        ):
+            return
+        recipe, tutorial_id = pending
+        try:
+            name = await configure_standalone_product(
+                device,
+                recipe,
+                tutorial_id,
+                self._pending_association_name,
+            )
+        except Exception:
+            LOGGER.exception(
+                "Automatic post-discovery configuration failed for raw product %s; "
+                "keeping it available for diagnosis",
+                device.device_id,
+            )
+            self._pending_standalone_auto_finalize_failed = True
+            self._pending_standalone_candidate_device_id = None
+            self._pending_standalone_auto_finalize_task = None
+            self._clear_pending_association_name()
+            self._maybe_create_device_association_buttons(device)
+            return
+
+        LOGGER.info("Configured discovered product %s as %s", device.device_id, name)
+        self._clear_pending_association_name()
+        self._clear_pending_standalone_association()
+        await self.reload_devices_with_status()
+
     async def _async_auto_finalize_groupable_product(
         self, device: TydomRemoteControl | TydomInterrupter
     ) -> None:
@@ -3217,6 +3491,14 @@ class Hub:
         """Forget the association-name request once it has been handled."""
         self._pending_association_name = None
         self._pending_association_known_device_ids.clear()
+
+    def _clear_pending_standalone_association(self) -> None:
+        """Forget the one-endpoint configuration request after discovery."""
+        self._pending_standalone_association = None
+        self._pending_standalone_known_device_ids.clear()
+        self._pending_standalone_candidate_device_id = None
+        self._pending_standalone_auto_finalize_task = None
+        self._pending_standalone_auto_finalize_failed = False
 
     async def ping(self) -> None:
         """Periodically send pings."""
