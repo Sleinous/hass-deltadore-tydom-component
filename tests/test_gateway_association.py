@@ -4,6 +4,8 @@ from types import SimpleNamespace
 from unittest import IsolatedAsyncioTestCase
 from unittest.mock import AsyncMock, MagicMock, patch
 
+from homeassistant.const import EntityCategory
+
 from custom_components.deltadore_tydom.hub import (
     ASSOCIATION_CATALOG,
     GROUPABLE_ASSOCIATION_BY_LABEL,
@@ -1566,6 +1568,7 @@ class GatewayAssociationTests(IsolatedAsyncioTestCase):
         button = HADeviceRemovalButton(device, None, remove)
 
         self.assertTrue(button._attr_entity_registry_enabled_default)
+        self.assertEqual(button._attr_entity_category, EntityCategory.CONFIG)
         self.assertTrue(button.available)
 
         await button.async_press()
