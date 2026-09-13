@@ -93,11 +93,62 @@ class GatewayAssociationTests(IsolatedAsyncioTestCase):
 
     def test_standalone_recipe_uses_selected_category_not_radio_recipe(self) -> None:
         """A TYXIA 4620 gate must not be configured as a light receiver."""
-        recipe = get_standalone_association_recipe("Portail")
+        recipe = get_standalone_association_recipe("Portail", "TYXIA 4620")
 
         self.assertIsNotNone(recipe)
         self.assertEqual(recipe.usage, "gate")
         self.assertEqual(recipe.picto, "picto_gate")
+
+    def test_each_installable_catalogue_selection_has_an_exact_recipe(self) -> None:
+        """No selected model may fall through a fuzzy category rule."""
+        for category, choices in ASSOCIATION_CATALOG.items():
+            for choice in choices:
+                if (
+                    choice.profile_id is None
+                    or choice.label in GROUPABLE_ASSOCIATION_BY_LABEL
+                ):
+                    continue
+                with self.subTest(category=category, product=choice.label):
+                    self.assertIsNotNone(
+                        get_standalone_association_recipe(category, choice.label)
+                    )
+
+    def test_model_recipe_distinguishes_shared_radio_profiles(self) -> None:
+        """One radio payload can create distinct app-visible product kinds."""
+        self.assertEqual(
+            get_standalone_association_recipe("Garage", "TYXIA 4620").usage,
+            "garage_door",
+        )
+        self.assertEqual(
+            get_standalone_association_recipe("Portail", "TYXIA 4620").usage,
+            "gate",
+        )
+        self.assertEqual(
+            get_standalone_association_recipe("Autres", "TYXIA 4600").usage,
+            "others",
+        )
+        self.assertEqual(
+            get_standalone_association_recipe("Thermique", "NSC RF ELM Leblanc").usage,
+            "boiler",
+        )
+
+    def test_unknown_model_is_not_configured_from_a_category_match(self) -> None:
+        """Only a model selected from the official catalogue may be promoted."""
+        self.assertIsNone(
+            get_standalone_association_recipe("Portail", "Unknown receiver")
+        )
+
+    def test_multi_channel_remotes_remain_outside_standalone_recipes(self) -> None:
+        """Do not replace the tested per-channel remote workflows."""
+        self.assertIsNone(
+            get_standalone_association_recipe("Télécommandes et claviers", "TYXIA 1410")
+        )
+        self.assertIsNone(
+            get_standalone_association_recipe("Télécommandes et claviers", "TL 2000")
+        )
+        self.assertIsNone(
+            get_standalone_association_recipe("Interrupteurs", "TYXIA 2600")
+        )
 
     def test_tysense_sun_uses_its_official_sensor_usage(self) -> None:
         """A Tysense Sun must not be reduced to the generic sensor type."""
@@ -208,6 +259,35 @@ class GatewayAssociationTests(IsolatedAsyncioTestCase):
         self.assertEqual(posted["endpoints"][0]["first_usage"], "sensor")
         self.assertEqual(posted["endpoints"][0]["last_usage"], "sensorSun")
         self.assertEqual(posted["endpoints"][0]["picto"], "picto_sensor6")
+
+    async def test_existing_tywatt_configuration_is_never_rewritten(self) -> None:
+        """Keep Quiet's validated TYWATT 5100 configuration gateway-owned."""
+        original = {
+            "endpoints": [
+                {
+                    "id_device": 1789000000,
+                    "id_endpoint": 1789000000,
+                    "name": "TYWATT 5100",
+                    "first_usage": "conso",
+                    "last_usage": "conso",
+                }
+            ]
+        }
+        client = SimpleNamespace(
+            get_config_file_document=AsyncMock(return_value=original),
+            post_config_file_document=AsyncMock(),
+        )
+        device = SimpleNamespace(
+            _id=1789000000,
+            _endpoint=1789000000,
+            _tydom_client=client,
+        )
+        recipe = get_standalone_association_recipe("Consommation", "TYWATT 5100")
+
+        with self.assertRaisesRegex(ValueError, "already configured"):
+            await configure_standalone_product(device, recipe, "32_tywatt_5100")
+
+        client.post_config_file_document.assert_not_awaited()
 
     def test_catalog_matches_the_official_application_group_order(self) -> None:
         """Keep the gateway flow familiar to users of the official app."""
