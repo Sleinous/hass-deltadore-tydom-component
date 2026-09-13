@@ -6730,6 +6730,11 @@ class HADeviceAssociationButton(ButtonEntity, HAEntity):
 class HADeviceRemovalButton(HADeviceAssociationButton):
     """Control for permanently removing one product."""
 
+    # This is an administrative gateway operation, never a day-to-day device
+    # control.  Keeping it in Configuration also avoids confusing it with the
+    # event entities which report real presses on physical remotes.
+    _attr_entity_category = EntityCategory.CONFIG
+
     def __init__(self, device: TydomDevice, hass, removal_callback=None) -> None:
         """Initialise a permanent-removal control.
 
@@ -7416,11 +7421,13 @@ class HARemoteEvent(EventEntity, HAEntity):
         self._last_event_sequence = device.event_sequence
         self._attr_unique_id = f"{self._device.device_id}_remote_event"
         button_number = device.button_number
-        self._attr_name = (
-            f"Button {button_number}"
-            if button_number is not None
-            else device.device_name
-        )
+        if button_number is None:
+            self._attr_name = device.device_name
+        else:
+            self._attr_translation_key = "remote_button"
+            self._attr_translation_placeholders = {
+                "button_number": str(button_number),
+            }
 
     async def async_added_to_hass(self) -> None:
         """Listen for fresh actions from this physical button endpoint."""
@@ -7600,11 +7607,13 @@ class HAInterrupterEvent(EventEntity, HAEntity):
         self._device._ha_device = self
         self._last_event_sequence = device.event_sequence
         self._attr_unique_id = f"{self._device.device_id}_interrupter_event"
-        self._attr_name = (
-            f"Button {device.button}"
-            if device.button is not None
-            else device.device_name
-        )
+        if device.button is None:
+            self._attr_name = device.device_name
+        else:
+            self._attr_translation_key = "interrupter_button"
+            self._attr_translation_placeholders = {
+                "button_number": str(device.button),
+            }
 
     async def async_added_to_hass(self) -> None:
         """Listen for fresh actions from this physical button endpoint."""
