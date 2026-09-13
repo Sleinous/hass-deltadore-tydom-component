@@ -2564,6 +2564,22 @@ class Hub:
             self._pending_standalone_auto_finalize_task = self._hass.async_create_task(
                 self._async_auto_finalize_standalone_product(recovered_standalone)
             )
+        elif standalone_recipe is not None:
+            # Recover a product that is already paired on the radio but was
+            # never written to /configs/file.  This is deliberately a single
+            # best-effort data refresh: it makes a retry adopt the existing
+            # endpoint without asking the user to repeat the physical ritual,
+            # while a later physical association is still delivered normally.
+            refresh_data = getattr(self._tydom_client, "get_devices_data", None)
+            if callable(refresh_data):
+                try:
+                    await refresh_data()
+                except Exception:
+                    LOGGER.debug(
+                        "Could not immediately probe for a standalone "
+                        "association candidate",
+                        exc_info=True,
+                    )
         LOGGER.info(
             "Started gateway association for %s on config entry %s",
             payload,
