@@ -137,6 +137,32 @@ class GatewayAssociationTests(IsolatedAsyncioTestCase):
             {"tutorial_id": "7_Tyxia_serie4000"},
         )
 
+    async def test_configless_standalone_product_is_added_to_configuration(
+        self,
+    ) -> None:
+        """A radio-only discovery can become an app-visible product."""
+        original = {"endpoints": []}
+        client = SimpleNamespace(
+            get_config_file_document=AsyncMock(return_value=original),
+            post_config_file_document=AsyncMock(),
+        )
+        device = SimpleNamespace(
+            _id=1789288668,
+            _endpoint=1789288668,
+            _tydom_client=client,
+        )
+        recipe = get_standalone_association_recipe("Portail")
+
+        name = await configure_standalone_product(
+            device, recipe, "7_Tyxia_serie4000", "Portillon"
+        )
+
+        self.assertEqual(name, "Portillon")
+        posted = client.post_config_file_document.await_args.args[0]
+        self.assertEqual(len(posted["endpoints"]), 1)
+        self.assertEqual(posted["endpoints"][0]["name"], "Portillon")
+        self.assertEqual(posted["endpoints"][0]["last_usage"], "gate")
+
     def test_catalog_matches_the_official_application_group_order(self) -> None:
         """Keep the gateway flow familiar to users of the official app."""
         self.assertEqual(

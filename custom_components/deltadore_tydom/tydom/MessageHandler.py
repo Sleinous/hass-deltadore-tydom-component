@@ -1578,6 +1578,19 @@ class MessageHandler:
                         unique_id not in known_pending_endpoints
                         or unique_id in generic_pending_endpoints
                     )
+                    known_pending_standalone_device_ids = getattr(
+                        self.tydom_client,
+                        "_configless_standalone_known_device_ids",
+                        set(),
+                    )
+                    allow_pending_standalone_discovery = (
+                        getattr(
+                            self.tydom_client,
+                            "_allow_configless_standalone_discovery",
+                            False,
+                        )
+                        and str(device_id) not in known_pending_standalone_device_ids
+                    )
 
                     # Check for collisions
                     if unique_id in seen_unique_ids:
@@ -1732,6 +1745,27 @@ class MessageHandler:
                             device_id,
                             endpoint_id,
                             type_of_id,
+                        )
+
+                    if (
+                        config_file_data is not None
+                        and (not name_of_id or not type_of_id)
+                        and allow_pending_standalone_discovery
+                    ):
+                        # Not every gateway creates the normal empty
+                        # ``Produit N`` entry after a radio association.  The
+                        # Hub has an explicitly selected one-endpoint workflow
+                        # pending, so expose this new radio endpoint just long
+                        # enough for it to write the missing configuration.
+                        name_of_id = f"Produit {device_id}"
+                        type_of_id = "unknown"
+                        device_name[unique_id] = name_of_id
+                        device_type[unique_id] = type_of_id
+                        LOGGER.info(
+                            "Discovered configless standalone endpoint "
+                            "(device_id=%s, endpoint_id=%s)",
+                            device_id,
+                            endpoint_id,
                         )
 
                     # Check if device is registered in configuration

@@ -1758,11 +1758,7 @@ async def configure_standalone_product(
         ),
         None,
     )
-    if endpoint is None:
-        raise ValueError(
-            "The discovered endpoint is no longer in gateway configuration"
-        )
-    if endpoint.get("last_usage"):
+    if endpoint is not None and endpoint.get("last_usage"):
         raise ValueError("The discovered endpoint is already configured")
 
     requested_name = " ".join((name_override or "").split())
@@ -1782,14 +1778,22 @@ async def configure_standalone_product(
         configured_endpoint["widget_behavior"] = {"tutorial_id": tutorial_id}
 
     updated_config = copy.deepcopy(config)
-    for item in updated_config["endpoints"]:
-        if (
-            isinstance(item, dict)
-            and str(item.get("id_device")) == device_id
-            and str(item.get("id_endpoint")) == endpoint_id
-        ):
-            item.update(configured_endpoint)
-            break
+    if endpoint is None:
+        # Some gateways accept the radio association but never add the raw
+        # ``Produit N`` placeholder to /configs/file.  The endpoint was just
+        # observed during a selected standalone association, so append its
+        # application configuration directly rather than leaving a radio-only
+        # product invisible to both HA and the TYDOM application.
+        updated_config["endpoints"].append(configured_endpoint)
+    else:
+        for item in updated_config["endpoints"]:
+            if (
+                isinstance(item, dict)
+                and str(item.get("id_device")) == device_id
+                and str(item.get("id_endpoint")) == endpoint_id
+            ):
+                item.update(configured_endpoint)
+                break
     await post_config(updated_config)
     return name
 
@@ -2480,6 +2484,16 @@ class Hub:
             self._pending_standalone_known_device_ids = set(self.devices)
             self._pending_standalone_candidate_device_id = None
             self._pending_standalone_auto_finalize_failed = False
+            # A few gateways announce a newly paired one-endpoint actuator in
+            # /devices/data without first creating a /configs/file entry. Let
+            # MessageHandler expose exactly a newly observed endpoint while
+            # this selected standalone workflow is pending; finalisation then
+            # writes the missing app-visible configuration.
+            self._tydom_client._allow_configless_standalone_discovery = True
+            self._tydom_client._configless_standalone_known_device_ids = {
+                str(getattr(device, "_id", device_id))
+                for device_id, device in self.devices.items()
+            }
             # A previous version could leave exactly one radio-successful
             # endpoint as ``Produit N``.  Adopt that explicit raw placeholder
             # when the user starts the matching workflow again; do not guess
@@ -3512,6 +3526,8 @@ class Hub:
         self._pending_standalone_candidate_device_id = None
         self._pending_standalone_auto_finalize_task = None
         self._pending_standalone_auto_finalize_failed = False
+        self._tydom_client._allow_configless_standalone_discovery = False
+        self._tydom_client._configless_standalone_known_device_ids = set()
 
     async def ping(self) -> None:
         """Periodically send pings."""
