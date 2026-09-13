@@ -99,6 +99,14 @@ class GatewayAssociationTests(IsolatedAsyncioTestCase):
         self.assertEqual(recipe.usage, "gate")
         self.assertEqual(recipe.picto, "picto_gate")
 
+    def test_tysense_sun_uses_its_official_sensor_usage(self) -> None:
+        """A Tysense Sun must not be reduced to the generic sensor type."""
+        recipe = get_standalone_association_recipe("Capteurs", "Tysense Sun")
+
+        self.assertIsNotNone(recipe)
+        self.assertEqual(recipe.usage, "sensorSun")
+        self.assertEqual(recipe.picto, "picto_sensor6")
+
     async def test_raw_standalone_product_is_promoted_to_gate_configuration(
         self,
     ) -> None:
@@ -164,6 +172,42 @@ class GatewayAssociationTests(IsolatedAsyncioTestCase):
         self.assertEqual(len(posted["endpoints"]), 1)
         self.assertEqual(posted["endpoints"][0]["name"], "Portillon")
         self.assertEqual(posted["endpoints"][0]["last_usage"], "gate")
+
+    async def test_tysense_sun_repairs_previous_generic_sensor_entry(self) -> None:
+        """The previously created generic entry can be fixed without re-pairing."""
+        original = {
+            "endpoints": [
+                {
+                    "id_device": 1789328825,
+                    "id_endpoint": 1789328825,
+                    "name": "Capteur 1",
+                    "picto": "picto_sensor5",
+                    "first_usage": "sensor",
+                    "last_usage": "sensor",
+                    "widget_behavior": {"tutorial_id": "tysense_sun"},
+                }
+            ]
+        }
+        client = SimpleNamespace(
+            get_config_file_document=AsyncMock(return_value=original),
+            post_config_file_document=AsyncMock(),
+        )
+        device = SimpleNamespace(
+            _id=1789328825,
+            _endpoint=1789328825,
+            _tydom_client=client,
+        )
+        recipe = get_standalone_association_recipe("Capteurs", "Tysense Sun")
+
+        name = await configure_standalone_product(
+            device, recipe, "tysense_sun", "Sonde Soleil Ouest"
+        )
+
+        self.assertEqual(name, "Sonde Soleil Ouest")
+        posted = client.post_config_file_document.await_args.args[0]
+        self.assertEqual(posted["endpoints"][0]["first_usage"], "sensor")
+        self.assertEqual(posted["endpoints"][0]["last_usage"], "sensorSun")
+        self.assertEqual(posted["endpoints"][0]["picto"], "picto_sensor6")
 
     def test_catalog_matches_the_official_application_group_order(self) -> None:
         """Keep the gateway flow familiar to users of the official app."""
