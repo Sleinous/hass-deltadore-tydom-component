@@ -1239,10 +1239,7 @@ async def remove_product_association(device) -> None:
             retained_members = [
                 member
                 for member in members
-                if not (
-                    isinstance(member, dict)
-                    and str(member.get("id")) == device_id
-                )
+                if not (isinstance(member, dict) and str(member.get("id")) == device_id)
             ]
             if len(retained_members) == len(members):
                 continue
@@ -1289,7 +1286,9 @@ async def remove_product_association(device) -> None:
                 try:
                     await tydom_client.post_groups_file_document(groups)
                 except Exception:
-                    LOGGER.exception("Unable to restore /groups/file after failed removal")
+                    LOGGER.exception(
+                        "Unable to restore /groups/file after failed removal"
+                    )
             try:
                 if config_updated:
                     await tydom_client.post_config_file_document(config)
