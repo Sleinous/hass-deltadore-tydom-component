@@ -976,46 +976,129 @@ DISCOVERY_PROFILES.update(OFFICIAL_DISCOVERY_PROFILES)
 ASSOCIATION_CATALOG = OFFICIAL_ASSOCIATION_CATALOG
 
 
-# A selected category is the usage the official application ultimately writes
-# for a one-endpoint product.  Keep this independent from the radio profile:
-# TYXIA 4620, for example, uses the same X3D radio recipe as a light receiver
-# but is a ``gate`` when selected under ``Portail``.
-_STANDALONE_ASSOCIATION_RECIPES: tuple[tuple[str, StandaloneAssociationRecipe], ...] = (
-    ("volet", StandaloneAssociationRecipe("shutter", "picto_shutter", "Volet")),
-    ("clairage", StandaloneAssociationRecipe("light", "picto_lamp", "Éclairage")),
-    (
-        "therm",
-        StandaloneAssociationRecipe("electric", "picto_thermometer", "Thermique"),
+# The official discovery request identifies the radio family.  The official
+# application then writes a *model-and-usage* configuration in /configs/file.
+# Keep this separate from the radio profile: TYXIA 4620, for example, uses the
+# same X3D discovery payload as a light receiver but becomes a gate when it is
+# selected under ``Portail``.
+_OFFICIAL_CATEGORY_ASSOCIATION_RECIPES: dict[str, StandaloneAssociationRecipe] = {
+    "Volets": StandaloneAssociationRecipe("shutter", "picto_shutter", "Volet"),
+    "Éclairages": StandaloneAssociationRecipe("light", "picto_lamp", "Éclairage"),
+    "Thermique": StandaloneAssociationRecipe(
+        "electric", "picto_thermometer", "Chauffage"
     ),
-    (
-        "garage",
-        StandaloneAssociationRecipe("garage_door", "picto_sectional_door", "Garage"),
+    "Garage": StandaloneAssociationRecipe(
+        "garage_door", "picto_sectional_door", "Garage"
     ),
-    ("portail", StandaloneAssociationRecipe("gate", "picto_gate", "Portail")),
-    ("alarme", StandaloneAssociationRecipe("alarm", "picto_alarm", "Alarme")),
-    (
-        "consommation",
-        StandaloneAssociationRecipe("conso", "picto_conso", "Consommation"),
+    "Portail": StandaloneAssociationRecipe("gate", "picto_gate", "Portail"),
+    "Alarme": StandaloneAssociationRecipe("alarm", "picto_alarm", "Alarme"),
+    "Consommation": StandaloneAssociationRecipe("conso", "picto_conso", "Consommation"),
+    "Porte": StandaloneAssociationRecipe("belmDoor", "picto_belmdoor", "Porte"),
+    "Fenêtres": StandaloneAssociationRecipe(
+        "windowFrench", "picto_window", "Fenêtre", "window"
     ),
-    ("porte", StandaloneAssociationRecipe("belmDoor", "picto_belmdoor", "Porte")),
-    ("fen", StandaloneAssociationRecipe("windowFrench", "picto_window", "Fenêtre")),
-    ("store", StandaloneAssociationRecipe("awning", "picto_awning_awning", "Store")),
-    ("prise", StandaloneAssociationRecipe("plug", "default_device", "Prise")),
-    ("autres", StandaloneAssociationRecipe("light", "default_device", "Appareil")),
-    ("capteur", StandaloneAssociationRecipe("sensor", "picto_sensor5", "Capteur")),
+    "Stores": StandaloneAssociationRecipe("awning", "picto_awning_awning", "Store"),
+    "Prise": StandaloneAssociationRecipe("plug", "picto_smartplug", "Prise"),
+    "Autres": StandaloneAssociationRecipe("others", "default_device", "Appareil"),
+    "Capteurs": StandaloneAssociationRecipe("sensor", "picto_sensor1", "Capteur"),
+}
+
+# These products are explicitly marked as ``boiler`` by the app catalogue;
+# treating them as the generic ``electric`` thermal class is incorrect.
+_OFFICIAL_THERMIC_BOILER_PRODUCTS = frozenset(
+    {
+        "NSC RF ELM Leblanc",
+        "RADIO TYBOX 810 (RF 640)",
+        "RADIO TYBOX 811 (RF 640)",
+        "RF 6050+",
+        "RF 7210",
+        "TRV 1.0",
+        "TYBOX 1010 WT",
+        "TYBOX 1137 (RF6000+)",
+        "TYBOX 137 (RF 640)",
+        "TYBOX 137+ (RF6000+)",
+        "TYBOX 2010 WT",
+        "TYBOX 2300 (RF 6000)",
+        "TYBOX 237 (RF 640)",
+        "TYBOX 337 (RF 640)",
+        "TYBOX 4100",
+        "TYBOX 4110",
+        "TYBOX 4150",
+        "TYBOX 4210",
+        "TYBOX 4250",
+        "TYBOX 5000",
+        "TYBOX 5100 (RF 6000)",
+        "TYBOX 5150 (RF 6200)",
+        "TYBOX 5200 (RF 6050)",
+        "TYBOX 5300 (RF 6050+)",
+        "TYBOX RF 210 (RF 7210)",
+        "Tywell 2050 (RF 6050+)",
+        "Tywell 2050 L (RF 6050+)",
+    }
 )
 
-# A few sensor profiles share the generic ``Capteurs`` discovery entry but
-# require a product-specific usage in /configs/file.  In particular, TYDOM
-# uses ``sensorSun`` (not the generic ``sensor``) to make a Tysense Sun a
-# managed solar probe in both the application and Home Assistant.
-_STANDALONE_ASSOCIATION_RECIPES_BY_PRODUCT: dict[str, StandaloneAssociationRecipe] = {
-    "Tysense Sun": StandaloneAssociationRecipe(
-        "sensorSun", "picto_sensor6", "Sonde Soleil", "sensor"
+_OFFICIAL_MODEL_ASSOCIATION_RECIPES: dict[
+    tuple[str, str], StandaloneAssociationRecipe
+] = {
+    ("Fenêtres", "DETECTEUR VERROUILLAGE DVI SLIDING"): StandaloneAssociationRecipe(
+        "windowSliding", "picto_window", "Fenêtre", "window"
     ),
-    "Tysense Thermo": StandaloneAssociationRecipe(
+    ("Fenêtres", "DETECTEUR VERROUILLAGE DVI SWING"): StandaloneAssociationRecipe(
+        "windowFrench", "picto_window", "Fenêtre", "window"
+    ),
+    ("Fenêtres", "USAGE DETECT WINDOW FPI"): StandaloneAssociationRecipe(
+        "windowFPI", "picto_window", "Fenêtre", "window"
+    ),
+    ("Capteurs", "TYBOX CONTROL"): StandaloneAssociationRecipe(
         "sensorThermo", "picto_sensor5", "Sonde Température", "sensor"
     ),
+    ("Capteurs", "TYBOX CONTROL XL"): StandaloneAssociationRecipe(
+        "sensorThermo", "picto_sensor5", "Sonde Température", "sensor"
+    ),
+    ("Capteurs", "Tysense Sun"): StandaloneAssociationRecipe(
+        "sensorSun", "picto_sensor6", "Sonde Soleil", "sensor"
+    ),
+    ("Capteurs", "Tysense Thermo"): StandaloneAssociationRecipe(
+        "sensorThermo", "picto_sensor5", "Sonde Température", "sensor"
+    ),
+    ("Capteurs", "USAGE SENSOR DF"): StandaloneAssociationRecipe(
+        "sensorDF", "picto_sensor_df", "Détecteur", "sensor"
+    ),
+    ("Capteurs", "USAGE SENSOR DFR"): StandaloneAssociationRecipe(
+        "sensorDFR", "picto_sensor_dfr", "Détecteur", "sensor"
+    ),
+    ("Capteurs", "USAGE WEATHER"): StandaloneAssociationRecipe(
+        "weather", "picto_weather", "Météo"
+    ),
+}
+
+
+def _get_official_model_association_recipe(
+    category: str, product_label: str
+) -> StandaloneAssociationRecipe:
+    """Return the extracted app recipe for one catalogue selection."""
+    recipe = _OFFICIAL_MODEL_ASSOCIATION_RECIPES.get((category, product_label))
+    if recipe is not None:
+        return recipe
+    if category == "Thermique" and product_label in _OFFICIAL_THERMIC_BOILER_PRODUCTS:
+        return StandaloneAssociationRecipe("boiler", "picto_boiler", "Chaudière")
+    return _OFFICIAL_CATEGORY_ASSOCIATION_RECIPES[category]
+
+
+# Materialise every selected app model rather than applying a fuzzy category
+# fallback at discovery time.  Multi-channel remote products stay on their
+# existing dedicated workflow and are deliberately excluded from this table.
+_OFFICIAL_STANDALONE_ASSOCIATION_RECIPES: dict[
+    tuple[str, str], StandaloneAssociationRecipe
+] = {
+    (category, choice.label): _get_official_model_association_recipe(
+        category, choice.label
+    )
+    for category, choices in OFFICIAL_ASSOCIATION_CATALOG.items()
+    if category in _OFFICIAL_CATEGORY_ASSOCIATION_RECIPES
+    for choice in choices
+    if choice.profile_id is not None
+    and choice.label not in GROUPABLE_ASSOCIATION_BY_LABEL
 }
 
 
@@ -1023,24 +1106,15 @@ def get_standalone_association_recipe(
     category: str,
     product_label: str | None = None,
 ) -> StandaloneAssociationRecipe | None:
-    """Return the configuration recipe for a selected non-groupable category.
+    """Return the exact app-derived recipe for one selected model.
 
-    Matching by the stable French category stem deliberately tolerates the
-    legacy catalogue's mojibake accents while keeping the product selection
-    itself fully data driven.
+    The association UI always supplies ``product_label``.  The category-only
+    form remains for compatibility with prior callers but is never used for a
+    gateway discovery, so an unknown model cannot be configured by accident.
     """
-    if product_label in _STANDALONE_ASSOCIATION_RECIPES_BY_PRODUCT:
-        return _STANDALONE_ASSOCIATION_RECIPES_BY_PRODUCT[product_label]
-
-    normalized = category.casefold()
-    return next(
-        (
-            recipe
-            for stem, recipe in _STANDALONE_ASSOCIATION_RECIPES
-            if stem in normalized
-        ),
-        None,
-    )
+    if product_label is not None:
+        return _OFFICIAL_STANDALONE_ASSOCIATION_RECIPES.get((category, product_label))
+    return _OFFICIAL_CATEGORY_ASSOCIATION_RECIPES.get(category)
 
 
 def get_association_choices(category: str) -> tuple[AssociationChoice, ...]:
