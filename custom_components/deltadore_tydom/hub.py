@@ -949,14 +949,9 @@ OFFICIAL_ASSOCIATION_CATALOG: dict[str, tuple[AssociationChoice, ...]] = {
         AssociationChoice("SENSOR STI 2000", "official:sensor_X3D_direct"),
         AssociationChoice("TYBOX CONTROL", "official:sensor_X3D_direct"),
         AssociationChoice("TYBOX CONTROL XL", "official:sensor_X3D_direct"),
-        # Tysense feeds the Tywell bioclimatic controller.  The RT2012 route
-        # pairs it with an energy manager directly, not through a TYDOM
-        # gateway, so it is intentionally outside this gateway workflow.
-        AssociationChoice(
-            "Tysense Sun",
-            "official:sensor_X3D_direct",
-            required_gateway_names=frozenset({"tywell pro", "tywell home"}),
-        ),
+        # Tysense Sun is also present in existing TYDOM installations. Keep it
+        # selectable while its physical association flow is validated there.
+        AssociationChoice("Tysense Sun", "official:sensor_X3D_direct"),
         AssociationChoice(
             "Tysense Thermo",
             "official:temperature_X3D_direct",
