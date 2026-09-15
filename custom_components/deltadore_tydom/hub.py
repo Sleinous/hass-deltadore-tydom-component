@@ -949,9 +949,11 @@ OFFICIAL_ASSOCIATION_CATALOG: dict[str, tuple[AssociationChoice, ...]] = {
         AssociationChoice("SENSOR STI 2000", "official:sensor_X3D_direct"),
         AssociationChoice("TYBOX CONTROL", "official:sensor_X3D_direct"),
         AssociationChoice("TYBOX CONTROL XL", "official:sensor_X3D_direct"),
-        # Tysense Sun is also present in existing TYDOM installations. Keep it
-        # selectable while its physical association flow is validated there.
-        AssociationChoice("Tysense Sun", "official:sensor_X3D_direct"),
+        AssociationChoice(
+            "Tysense Sun",
+            "official:sensor_X3D_direct",
+            required_gateway_names=frozenset({"tywell pro", "tywell home"}),
+        ),
         AssociationChoice(
             "Tysense Thermo",
             "official:temperature_X3D_direct",
