@@ -215,6 +215,13 @@
                 }
             }
         },
+        "set_mode_using_stored_pin": {
+            "name": "Régler le mode de l'alarme avec le PIN enregistré",
+            "description": "Régler ou désarmer l'alarme sélectionnée depuis une automatisation ou un script Home Assistant avec le PIN enregistré dans les options de l'intégration. Le panneau d'alarme standard continue de demander un code. Cette action est réservée à Home Assistant.",
+            "fields": {
+                "mode": {"name": "Mode de l'alarme", "description": "Mode à activer, ou désarmement de l'alarme."}
+            }
+        },
         "get_events": {
             "name": "Obtenir les événements d'alarme",
             "description": "Obtenir les événements d'alarme",
