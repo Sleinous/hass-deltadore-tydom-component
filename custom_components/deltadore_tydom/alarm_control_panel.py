@@ -23,6 +23,7 @@ SERVICE_RENAME_ALARM_ZONE = "rename_alarm_zone"
 SERVICE_ENTER_ALARM_MAINTENANCE = "enter_alarm_maintenance"
 SERVICE_EXIT_ALARM_MAINTENANCE = "exit_alarm_maintenance"
 SERVICE_FORCE_ARM = "force_arm"
+SERVICE_SET_MODE_USING_STORED_PIN = "set_mode_using_stored_pin"
 
 ALARM_CODE_SCHEMA = vol.All(
     cv.string,
@@ -131,4 +132,12 @@ async def async_setup_entry(
             vol.Required("mode"): vol.In(("away", "home", "night")),
         },
         "async_force_arm",
+    )
+
+    platform.async_register_entity_service(
+        SERVICE_SET_MODE_USING_STORED_PIN,
+        {
+            vol.Required("mode"): vol.In(("disarm", "away", "home", "night")),
+        },
+        "async_set_mode_using_stored_pin",
     )
