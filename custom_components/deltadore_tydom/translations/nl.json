@@ -1581,6 +1581,30 @@
             },
             "zones": {
                 "name": "Alarmzones"
+            },
+            "tywatt_energy_distrib_elec_heating": {
+                "name": "Verbruiksverdeling (Elektriciteit, Verwarming)"
+            },
+            "tywatt_energy_distrib_elec_hotwater": {
+                "name": "Verbruiksverdeling (Elektriciteit, Warm water)"
+            },
+            "tywatt_energy_distrib_elec_other": {
+                "name": "Verbruiksverdeling (Elektriciteit, Overig)"
+            },
+            "tywatt_energy_distrib_elec_outlet": {
+                "name": "Verbruiksverdeling (Elektriciteit, Stekkers)"
+            },
+            "tywatt_energy_index_elec_heating": {
+                "name": "Verbruikstellerstand (Elektriciteit, Verwarming)"
+            },
+            "tywatt_energy_index_elec_hotwater": {
+                "name": "Verbruikstellerstand (Elektriciteit, Warm water)"
+            },
+            "tywatt_energy_index_elec_other": {
+                "name": "Verbruikstellerstand (Elektriciteit, Overig)"
+            },
+            "tywatt_energy_index_elec_total": {
+                "name": "Verbruikstellerstand (Elektriciteit, Totaal)"
             }
         },
         "binary_sensor": {
