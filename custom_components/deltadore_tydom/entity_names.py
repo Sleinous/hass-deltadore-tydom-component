@@ -586,6 +586,7 @@ def set_entity_name(
     attribute: str,
     *,
     fallback_name: str | None = None,
+    translation_key: str | None = None,
     placeholders: dict[str, str] | None = None,
 ) -> None:
     """Set a native HA translation without changing the entity identity.
@@ -593,15 +594,21 @@ def set_entity_name(
     A supplied ``_attr_name`` takes precedence over HA translations, even when
     its value is None. Remove the instance override for catalogue entries and
     keep an English description as the fallback for unsupported UI languages.
-    Unknown gateway attributes stay available with a readable technical name.
+    An explicit translation key preserves catalogue-specific names. Unknown
+    gateway attributes stay available with a readable technical name.
     """
-    key = attribute.lower()
-    if (name := ENTITY_NAMES.get(key)) is None:
+    attribute_key = attribute.lower()
+    key = translation_key or attribute_key
+    name = ENTITY_NAMES.get(attribute_key)
+    if name is None and translation_key is None:
         raw_name = fallback_name or attribute
         entity._attr_name = re.sub(r"([a-z])([A-Z])", r"\1 \2", raw_name).replace(
             "_", " "
         )
         return
+    if name is None:
+        raw_name = fallback_name or attribute
+        name = re.sub(r"([a-z])([A-Z])", r"\1 \2", raw_name).replace("_", " ")
     with suppress(AttributeError):
         del entity._attr_name
     entity._attr_translation_key = key
