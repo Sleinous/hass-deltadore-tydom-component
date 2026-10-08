@@ -731,19 +731,12 @@ class GenericSensor(SensorEntity):
         if attribute in self.diagnostic_attrs:
             self._attr_entity_category = EntityCategory.DIAGNOSTIC
 
-        # Weather-specific labels must survive generic capability naming.
-        # Other families reporting the same attribute keep their normal labels.
-        weather_translation_key = (
-            translation_key
-            if translation_key
-            and translation_key.startswith("tywell_weather_")
-            and (
-                isinstance(device, TydomWeather)
-                or registry_translation_key == "tywell_weather"
-            )
-            else None
+        set_entity_name(
+            self,
+            attribute,
+            fallback_name=name,
+            translation_key=translation_key,
         )
-        set_entity_name(self, weather_translation_key or attribute, fallback_name=name)
 
     def _get_hub(self):
         """Return the hub that owns this entity's TYDOM device."""

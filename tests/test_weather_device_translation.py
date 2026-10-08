@@ -4,6 +4,9 @@ from __future__ import annotations
 
 import ast
 import json
+import re
+from contextlib import suppress
+from dataclasses import dataclass, replace
 from pathlib import Path
 from types import SimpleNamespace
 from unittest import TestCase
@@ -90,6 +93,84 @@ def _load_generic_sensor_translation_keys():
         )
     )
     return ast.literal_eval(mapping)
+
+
+def _load_generic_sensor_name_call():
+    """Find the name-helper call made by GenericSensor.__init__."""
+    source_path = (
+        Path(__file__).parents[1]
+        / "custom_components"
+        / "deltadore_tydom"
+        / "ha_entities.py"
+    )
+    source = ast.parse(source_path.read_text(encoding="utf-8"))
+    sensor_class = next(
+        node
+        for node in source.body
+        if isinstance(node, ast.ClassDef) and node.name == "GenericSensor"
+    )
+    initializer = next(
+        node
+        for node in sensor_class.body
+        if isinstance(node, ast.FunctionDef) and node.name == "__init__"
+    )
+    return next(
+        node
+        for node in ast.walk(initializer)
+        if isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Name)
+        and node.func.id == "set_entity_name"
+    )
+
+
+def _load_set_entity_name():
+    """Load the production name helper with minimal Home Assistant stubs."""
+    source_path = (
+        Path(__file__).parents[1]
+        / "custom_components"
+        / "deltadore_tydom"
+        / "entity_names.py"
+    )
+    source = ast.parse(source_path.read_text(encoding="utf-8"))
+    helper = next(
+        node
+        for node in source.body
+        if isinstance(node, ast.FunctionDef) and node.name == "set_entity_name"
+    )
+    isolated_module = ast.Module(
+        body=[
+            ast.ImportFrom(
+                module="__future__",
+                names=[ast.alias(name="annotations")],
+                level=0,
+            ),
+            helper,
+        ],
+        type_ignores=[],
+    )
+    ast.fix_missing_locations(isolated_module)
+
+    @dataclass
+    class Description:
+        key: str
+        name: str | None
+        translation_key: str | None
+
+    namespace = {
+        "ENTITY_NAMES": {
+            "outtemperature": "Outdoor temperature",
+            "dailypower": "Daily power",
+            "currentpower": "Power",
+            "maxdailyouttemp": "Daily maximum outdoor temperature",
+            "weather": "Weather",
+        },
+        "EntityDescription": Description,
+        "replace": replace,
+        "re": re,
+        "suppress": suppress,
+    }
+    exec(compile(isolated_module, source_path, "exec"), namespace)
+    return namespace["set_entity_name"], Description
 
 
 def _load_generic_sensor_device_info_property():
@@ -197,6 +278,49 @@ class WeatherDeviceTranslationTests(TestCase):
             french["tywell_weather_max_daily_outdoor_temperature"]["name"],
             "Température extérieure maximale du jour",
         )
+
+    def test_generic_sensor_preserves_explicit_catalogue_translation_key(self) -> None:
+        """The shared name helper must not overwrite mapped translation keys."""
+        expected_keys = _load_generic_sensor_translation_keys()
+        name_call = _load_generic_sensor_name_call()
+        translation_key_argument = next(
+            keyword.value
+            for keyword in name_call.keywords
+            if keyword.arg == "translation_key"
+        )
+        self.assertIsInstance(translation_key_argument, ast.Name)
+        self.assertEqual(translation_key_argument.id, "translation_key")
+
+        set_entity_name, description_type = _load_set_entity_name()
+        english_names = {
+            "outTemperature": "Outdoor temperature",
+            "dailyPower": "Daily power",
+            "currentPower": "Power",
+            "maxDailyOutTemp": "Daily maximum outdoor temperature",
+            "weather": "Weather",
+        }
+        for attribute, fallback_name in english_names.items():
+            with self.subTest(attribute=attribute):
+                key = expected_keys[attribute]
+                entity = SimpleNamespace(
+                    _attr_name=None,
+                    entity_description=description_type(
+                        key=attribute,
+                        name=None,
+                        translation_key=key,
+                    ),
+                )
+                set_entity_name(
+                    entity,
+                    attribute,
+                    fallback_name=fallback_name,
+                    translation_key=key,
+                )
+
+                self.assertFalse(hasattr(entity, "_attr_name"))
+                self.assertEqual(entity._attr_translation_key, key)
+                self.assertEqual(entity.entity_description.translation_key, key)
+                self.assertEqual(entity.entity_description.name, fallback_name)
 
     def test_shared_weather_device_uses_native_device_translation_key(self) -> None:
         """The shared endpoint passes its translated name to the device registry."""
