@@ -919,6 +919,9 @@ class GenericSensor(SensorEntity):
         if "sw_version" in device_info_dict and not grouped_with_parent:
             info["sw_version"] = device_info_dict["sw_version"]
 
+        if translation_key := getattr(self, "_registry_translation_key_override", None):
+            info["translation_key"] = translation_key
+
         if parent_device_id := getattr(
             self, "_registry_parent_device_id_override", None
         ):
@@ -1129,6 +1132,8 @@ class BinarySensorBase(BinarySensorEntity):
             product_name = getattr(self._device, "productName", None)
             if product_name is not None:
                 info["model"] = str(product_name)
+        if translation_key := getattr(self, "_registry_translation_key_override", None):
+            info["translation_key"] = translation_key
         if parent_device_id := getattr(
             self, "_registry_parent_device_id_override", None
         ):
