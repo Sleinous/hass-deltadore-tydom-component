@@ -344,6 +344,38 @@ class EntityNameTests(TestCase):
                 self.assertEqual(sensor.native_value, 56.0)
                 self.assertEqual(sensor.native_unit_of_measurement, "%")
 
+    def test_weather_attributes_use_localized_sensor_names(self):
+        """Resolve weather-field labels through all ten supported catalogs."""
+        attributes = {
+            "outTemperature": "outtemperature",
+            "dailyPower": "dailypower",
+            "currentPower": "power",
+            "maxDailyOutTemp": "maxdailyouttemp",
+            "weather": "weather",
+        }
+        for catalog in sorted(TRANSLATIONS.glob("*.json")):
+            language = catalog.stem
+            translations = json.loads(catalog.read_text(encoding="utf-8"))
+            for attribute, translation_key in attributes.items():
+                with self.subTest(language=language, attribute=attribute):
+                    sensor = attach_platform(
+                        GenericSensor(
+                            self.device(), None, None, attribute, attribute, None
+                        ),
+                        language,
+                        "sensor",
+                    )
+                    self.assertEqual(
+                        sensor.name,
+                        translations["entity"]["sensor"][translation_key]["name"],
+                    )
+
+        french = json.loads((TRANSLATIONS / "fr.json").read_text(encoding="utf-8"))[
+            "entity"
+        ]["sensor"]
+        self.assertEqual(french["weather"]["name"], "Météo")
+        self.assertEqual(french["dailypower"]["name"], "Puissance journalière")
+
     def test_numbers_and_selects_keep_raw_attributes_and_values(self):
         """Presentation must not translate the API fields or selectable values."""
         device = self.device()
