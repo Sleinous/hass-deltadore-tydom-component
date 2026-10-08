@@ -204,7 +204,10 @@
             "name": "Régler le mode de l'alarme avec le PIN enregistré",
             "description": "Régler ou désarmer l'alarme sélectionnée depuis une automatisation ou un script Home Assistant avec le PIN enregistré dans les options de l'intégration. Le panneau d'alarme standard continue de demander un code. Cette action est réservée à Home Assistant.",
             "fields": {
-                "mode": {"name": "Mode de l'alarme", "description": "Mode à activer, ou désarmement de l'alarme."}
+                "mode": {
+                    "name": "Mode de l'alarme",
+                    "description": "Mode à activer, ou désarmement de l'alarme."
+                }
             }
         },
         "get_events": {
@@ -3441,6 +3444,30 @@
             },
             "zones": {
                 "name": "Zones d’alarme"
+            },
+            "tywatt_energy_distrib_elec_heating": {
+                "name": "Consommation électrique - Chauffage"
+            },
+            "tywatt_energy_distrib_elec_hotwater": {
+                "name": "Consommation électrique - Eau chaude"
+            },
+            "tywatt_energy_distrib_elec_other": {
+                "name": "Consommation électrique - Autres"
+            },
+            "tywatt_energy_distrib_elec_outlet": {
+                "name": "Consommation électrique - Prises"
+            },
+            "tywatt_energy_index_elec_heating": {
+                "name": "Index électrique - Chauffage"
+            },
+            "tywatt_energy_index_elec_hotwater": {
+                "name": "Index électrique - Eau chaude"
+            },
+            "tywatt_energy_index_elec_other": {
+                "name": "Index électrique - Autres"
+            },
+            "tywatt_energy_index_elec_total": {
+                "name": "Index électrique - Total"
             }
         },
         "binary_sensor": {

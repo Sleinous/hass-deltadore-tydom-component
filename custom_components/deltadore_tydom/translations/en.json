@@ -203,7 +203,10 @@
             "name": "Set alarm mode using the stored PIN",
             "description": "Set or disarm the selected alarm from a Home Assistant automation or script using the PIN saved in the integration options. The standard alarm panel continues to request a code. This action is for Home Assistant only.",
             "fields": {
-                "mode": {"name": "Alarm mode", "description": "Alarm mode to set, or disarm the alarm."}
+                "mode": {
+                    "name": "Alarm mode",
+                    "description": "Alarm mode to set, or disarm the alarm."
+                }
             }
         },
         "get_events": {
@@ -3440,6 +3443,30 @@
             },
             "zones": {
                 "name": "Alarm zones"
+            },
+            "tywatt_energy_distrib_elec_heating": {
+                "name": "Electricity consumption - Heating"
+            },
+            "tywatt_energy_distrib_elec_hotwater": {
+                "name": "Electricity consumption - Hot water"
+            },
+            "tywatt_energy_distrib_elec_other": {
+                "name": "Electricity consumption - Other"
+            },
+            "tywatt_energy_distrib_elec_outlet": {
+                "name": "Electricity consumption - Outlets"
+            },
+            "tywatt_energy_index_elec_heating": {
+                "name": "Electricity index - Heating"
+            },
+            "tywatt_energy_index_elec_hotwater": {
+                "name": "Electricity index - Hot water"
+            },
+            "tywatt_energy_index_elec_other": {
+                "name": "Electricity index - Other"
+            },
+            "tywatt_energy_index_elec_total": {
+                "name": "Electricity index - Total"
             }
         },
         "binary_sensor": {

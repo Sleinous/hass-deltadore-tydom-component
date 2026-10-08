@@ -534,6 +534,16 @@ class GenericSensor(SensorEntity):
 
     _attr_should_poll = False
     _attr_has_entity_name = True
+    TRANSLATION_KEYS = {
+        "energyDistrib_ELEC_HEATING": "tywatt_energy_distrib_elec_heating",
+        "energyDistrib_ELEC_HOTWATER": "tywatt_energy_distrib_elec_hotwater",
+        "energyDistrib_ELEC_OTHER": "tywatt_energy_distrib_elec_other",
+        "energyDistrib_ELEC_OUTLET": "tywatt_energy_distrib_elec_outlet",
+        "energyIndex_ELEC_HEATING": "tywatt_energy_index_elec_heating",
+        "energyIndex_ELEC_HOTWATER": "tywatt_energy_index_elec_hotwater",
+        "energyIndex_ELEC_OTHER": "tywatt_energy_index_elec_other",
+        "energyIndex_ELEC_TOTAL": "tywatt_energy_index_elec_total",
+    }
     diagnostic_attrs = [
         "config",
         "supervisionMode",
@@ -581,16 +591,18 @@ class GenericSensor(SensorEntity):
         # unique_id format: {device_id}_{entity_name}
         # device_id is stable and unique (endpoint_id + "_" + device_id from Tydom API)
         self._attr_unique_id = f"{self._device.device_id}_{name}"
-        self._attr_name = name
+        translation_key = self.TRANSLATION_KEYS.get(attribute)
+        self._attr_name = None if translation_key else name
         self._attribute = attribute
         # Create entity description with translation key
         entity_description = SensorEntityDescription(
             key=attribute,
-            name=name,
+            name=None if translation_key else name,
             device_class=device_class,
             state_class=state_class,
             native_unit_of_measurement=unit_of_measurement,
-            translation_key=f"sensor_{attribute}" if attribute else None,
+            translation_key=translation_key
+            or (f"sensor_{attribute}" if attribute else None),
         )
         self.entity_description = entity_description
         self._attr_device_class = device_class
@@ -2662,6 +2674,24 @@ class HaClimate(ClimateEntity, HAEntity):
             return []
         return super().get_sensors()
 
+    def _supports_absence_mode(self) -> bool:
+        """Return whether TYDOM has advertised or reported absence mode."""
+        if self._device.is_area_trv:
+            return False
+        local_mode_metadata = (self._device._metadata or {}).get("localMode", {})
+        return (
+            isinstance(local_mode_metadata, dict)
+            and "ABSENCE" in local_mode_metadata.get("enum_values", [])
+        ) or getattr(self._device, "localMode", None) == "ABSENCE"
+
+    @property
+    def preset_modes(self) -> list[str]:
+        """Expose the standard Away preset when TYDOM reports absence mode."""
+        modes = list(self._attr_preset_modes)
+        if self._supports_absence_mode() and PRESET_AWAY not in modes:
+            modes.append(PRESET_AWAY)
+        return modes
+
     async def async_added_to_hass(self) -> None:
         """Refresh on every device push (see HACover for the MRO rationale)."""
         await super().async_added_to_hass()
@@ -2901,6 +2931,11 @@ class HaClimate(ClimateEntity, HAEntity):
             if level == "ANTI_FROST":
                 return PRESET_AWAY
             return PRESET_NONE
+        if (
+            not self._device.is_area_trv
+            and getattr(self._device, "localMode", None) == "ABSENCE"
+        ):
+            return PRESET_AWAY
         if hasattr(self._device, "comfortMode"):
             comfort_mode = getattr(self._device, "comfortMode", None)
             if comfort_mode == "ANTI_FROST":
@@ -2936,6 +2971,25 @@ class HaClimate(ClimateEntity, HAEntity):
                 # enum doesn't include AUTO (e.g. some RF 6600 units) are
                 # left untouched, matching the previous no-op behaviour.
                 await self._device.set_thermic_level("AUTO")
+            return
+        if preset_mode == PRESET_AWAY and self._supports_absence_mode():
+            local_mode_metadata = (self._device._metadata or {}).get("localMode", {})
+            if (
+                isinstance(local_mode_metadata, dict)
+                and "ABSENCE" in local_mode_metadata.get("enum_values", [])
+                and "w" in local_mode_metadata.get("permission", "")
+            ):
+                if hasattr(self._device, "area_id"):
+                    await self._device._tydom_client.put_area_data(
+                        self._device.area_id, "localMode", "ABSENCE"
+                    )
+                else:
+                    await self._device._tydom_client.put_devices_data(
+                        self._device._id,
+                        self._device._endpoint,
+                        "localMode",
+                        "ABSENCE",
+                    )
             return
         if preset_mode == PRESET_NONE:
             return
