@@ -204,7 +204,8 @@ setting applies to all devices belonging to this integration entry.
   heating settings, remote-button events, opening, smoke and leak detection,
   temperature and energy measurements. Alarm state, pending issues, battery
   faults and transmission faults remain available, as do smoke-detector battery
-  warnings. The weather entity and gateway association controls remain available.
+  warnings. The weather entity and its associated sensors, plus gateway
+  association controls, remain available.
   Other technical registers, firmware details and maintenance/configuration
   controls are disabled.
 

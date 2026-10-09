@@ -737,6 +737,16 @@ class GenericSensor(SensorEntity):
             fallback_name=name,
             translation_key=translation_key,
         )
+        if (
+            translation_key
+            and translation_key.startswith("tywell_weather_")
+            and (
+                isinstance(device, TydomWeather)
+                or registry_translation_key == "tywell_weather"
+            )
+        ):
+            # Keep weather child sensors alongside the weather entity in simplified mode.
+            self.entity_profile_essential = True
 
     def _get_hub(self):
         """Return the hub that owns this entity's TYDOM device."""

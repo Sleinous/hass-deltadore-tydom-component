@@ -153,6 +153,51 @@ def profile_types(registry):
     )
 
 
+def generic_sensor_type():
+    """Load GenericSensor with small Home Assistant test doubles."""
+    tree = ast.parse((COMPONENT / "ha_entities.py").read_text(encoding="utf-8"))
+    generic_sensor = next(
+        node
+        for node in tree.body
+        if isinstance(node, ast.ClassDef) and node.name == "GenericSensor"
+    )
+
+    class SensorEntityStub:
+        """Provide the base class needed to construct GenericSensor."""
+
+    class SensorEntityDescriptionStub:
+        """Keep the values used by the entity-profile classifier."""
+
+        def __init__(self, **kwargs):
+            self.__dict__.update(kwargs)
+
+    class TydomWeatherStub:
+        """Represent a weather device for sensor classification."""
+
+        device_id = "weather-device"
+
+    namespace = {
+        "EntityCategory": SimpleNamespace(DIAGNOSTIC="diagnostic"),
+        "SensorDeviceClass": SimpleNamespace(BATTERY="battery"),
+        "SensorEntity": SensorEntityStub,
+        "SensorEntityDescription": SensorEntityDescriptionStub,
+        "SensorStateClass": SimpleNamespace(),
+        "TydomWeather": TydomWeatherStub,
+        "set_entity_name": lambda *args, **kwargs: None,
+    }
+    module = ast.Module(body=[generic_sensor], type_ignores=[])
+    exec(
+        compile(
+            module,
+            str(COMPONENT / "ha_entities.py"),
+            "exec",
+            flags=__import__("__future__").annotations.compiler_flag,
+        ),
+        namespace,
+    )
+    return namespace["GenericSensor"], TydomWeatherStub
+
+
 class TestClassification(TestCase):
     """Check functional and safety information across device families."""
 
@@ -265,6 +310,41 @@ class TestClassification(TestCase):
         self.assertFalse(self.classify(FakeEntity(essential=False)))
         self.assertTrue(self.classify(FakeEntity(category="config", essential=True)))
 
+    def test_all_weather_child_sensors_are_essential(self):
+        """Keep the generic sensor children of a TYDOM weather device enabled."""
+        GenericSensor, TydomWeatherStub = generic_sensor_type()
+        weather_device = TydomWeatherStub()
+        for attribute in (
+            "outTemperature",
+            "dailyPower",
+            "currentPower",
+            "maxDailyOutTemp",
+            "weather",
+        ):
+            with self.subTest(attribute=attribute):
+                entity = GenericSensor(
+                    weather_device,
+                    None,
+                    None,
+                    attribute,
+                    attribute,
+                    None,
+                )
+                self.assertTrue(entity.entity_profile_essential)
+                self.assertTrue(self.classify(entity))
+
+        ordinary_device = SimpleNamespace(device_id="ordinary-device")
+        ordinary_sensor = GenericSensor(
+            ordinary_device,
+            None,
+            None,
+            "dailyPower",
+            "dailyPower",
+            None,
+        )
+        self.assertFalse(hasattr(ordinary_sensor, "entity_profile_essential"))
+        self.assertFalse(self.classify(ordinary_sensor))
+
     def test_gateway_association_controls_are_explicitly_essential(self):
         """Keep the gateway pairing workflow despite its config category."""
         tree = ast.parse((COMPONENT / "ha_entities.py").read_text(encoding="utf-8"))
@@ -279,8 +359,7 @@ class TestClassification(TestCase):
             for node in association_base.body
             if isinstance(node, ast.Assign)
             and any(
-                isinstance(target, ast.Name)
-                and target.id == "entity_profile_essential"
+                isinstance(target, ast.Name) and target.id == "entity_profile_essential"
                 for target in node.targets
             )
         )
@@ -397,6 +476,35 @@ class TestRegistryModes(TestCase):
         self.assertFalse(row.options[DOMAIN]["secondary"])
         self.assertFalse(row.options[DOMAIN]["profile_disabled"])
 
+    def test_weather_child_sensors_disabled_by_old_profile_are_restored(self):
+        """Restore weather readings previously classified as secondary."""
+        self.entry.data = {"entity_mode": "simplified"}
+        self.profile = self.Profile(self.hass, self.entry)
+        sensor_ids = (
+            "weather_outdoor_temperature",
+            "weather_daily_power",
+            "weather_power",
+            "weather_max_daily_outdoor_temperature",
+            "weather_condition",
+        )
+        for unique_id in sensor_ids:
+            entity_id = f"sensor.{unique_id}"
+            self.registry.entities[entity_id] = RegistryEntry(
+                entity_id,
+                unique_id,
+                disabled_by=Disabler.INTEGRATION,
+                options={DOMAIN: {"secondary": True, "profile_disabled": True}},
+            )
+
+        self.add([FakeEntity(unique_id, essential=True) for unique_id in sensor_ids])
+
+        for unique_id in sensor_ids:
+            with self.subTest(unique_id=unique_id):
+                row = self.registry.entities[f"sensor.{unique_id}"]
+                self.assertIsNone(row.disabled_by)
+                self.assertFalse(row.options[DOMAIN]["secondary"])
+                self.assertFalse(row.options[DOMAIN]["profile_disabled"])
+
     def test_options_changes_apply_to_existing_entities_reversibly(self):
         """Change existing entities only on an explicit mode switch."""
         self.add(
@@ -500,9 +608,7 @@ class TestRegistryModes(TestCase):
         self.assertEqual(
             self.row("association_start").disabled_by, Disabler.INTEGRATION
         )
-        self.add(
-            [FakeEntity("association_start", category="config", essential=True)]
-        )
+        self.add([FakeEntity("association_start", category="config", essential=True)])
         self.assertIsNone(self.row("association_start").disabled_by)
         self.assertFalse(self.row("association_start").options[DOMAIN]["secondary"])
 

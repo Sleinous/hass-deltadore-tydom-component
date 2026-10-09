@@ -218,8 +218,9 @@ d'intégration.
   télécommande, détection d'ouverture, de fumée et de fuite, températures et
   mesures d'énergie. L'état de l'alarme, les événements en attente, les défauts
   de pile et de transmission restent disponibles, ainsi que les alertes de pile
-  des détecteurs de fumée. Les entités météo et les commandes pour l'appairage
-  de produits sur la passerelle restent disponibles. Les autres registres
+  des détecteurs de fumée. L'entité météo et ses capteurs associés, ainsi que
+  les commandes pour l'appairage de produits sur la passerelle restent
+  disponibles. Les autres registres
   techniques, informations de firmware et commandes de maintenance/configuration
   sont désactivés.
 
