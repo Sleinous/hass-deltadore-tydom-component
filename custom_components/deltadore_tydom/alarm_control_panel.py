@@ -139,11 +139,3 @@ async def async_setup_entry(
         },
         "async_force_arm",
     )
-
-    platform.async_register_entity_service(
-        SERVICE_SET_MODE_USING_STORED_PIN,
-        {
-            vol.Required("mode"): vol.In(("disarm", "away", "home", "night")),
-        },
-        "async_set_mode_using_stored_pin",
-    )

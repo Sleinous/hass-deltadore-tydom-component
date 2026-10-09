@@ -214,13 +214,6 @@
                 }
             }
         },
-        "set_mode_using_stored_pin": {
-            "name": "Set alarm mode using the stored PIN",
-            "description": "Set or disarm the selected alarm from a Home Assistant automation or script using the PIN saved in the integration options. The standard alarm panel continues to request a code. This action is for Home Assistant only.",
-            "fields": {
-                "mode": {"name": "Alarm mode", "description": "Alarm mode to set, or disarm the alarm."}
-            }
-        },
         "get_events": {
             "name": "Get alarm events",
             "description": "Get alarm events",

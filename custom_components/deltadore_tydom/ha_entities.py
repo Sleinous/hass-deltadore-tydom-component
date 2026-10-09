@@ -4196,26 +4196,6 @@ class HaAlarm(AlarmControlPanelEntity, HAEntity):
         """Send arm night command."""
         await self._run_alarm_command(self._device.alarm_arm_night(code), "arming")
 
-    async def async_set_mode_using_stored_pin(self, mode: str) -> None:
-        """Change alarm mode using the PIN saved in the integration options."""
-        if not self._device._tydom_client._alarm_pin:
-            raise HomeAssistantError(
-                "Configure the alarm PIN in the integration options before using "
-                "this action."
-            )
-
-        commands = {
-            "disarm": self.async_alarm_disarm,
-            "away": self.async_alarm_arm_away,
-            "home": self.async_alarm_arm_home,
-            "night": self.async_alarm_arm_night,
-        }
-        command = commands.get(mode)
-        if command is None:
-            raise HomeAssistantError(f"Unsupported alarm mode: {mode}")
-
-        await command(None)
-
     async def async_alarm_trigger(self, code=None) -> None:
         """Send alarm trigger command."""
         await self._run_alarm_command(self._device.alarm_trigger(code), "triggering")
