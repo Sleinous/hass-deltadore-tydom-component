@@ -160,7 +160,13 @@ class EntityProfile:
                 if entity.unique_id is None:
                     continue
                 baseline_enabled = entity.entity_registry_enabled_default
-                secondary = not is_essential_entity(entity) and baseline_enabled
+                # Keep weather primary even if HA marks a weather entity as
+                # diagnostic or configuration-related.
+                secondary = (
+                    domain != "weather"
+                    and not is_essential_entity(entity)
+                    and baseline_enabled
+                )
                 self._known[(domain, entity.unique_id)] = (secondary, baseline_enabled)
                 entity_id = self._registry.async_get_entity_id(
                     domain, DOMAIN, entity.unique_id

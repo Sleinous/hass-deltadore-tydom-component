@@ -218,8 +218,10 @@ d'intégration.
   télécommande, détection d'ouverture, de fumée et de fuite, températures et
   mesures d'énergie. L'état de l'alarme, les événements en attente, les défauts
   de pile et de transmission restent disponibles, ainsi que les alertes de pile
-  des détecteurs de fumée. Les registres techniques, informations de firmware et
-  commandes de maintenance/configuration sont désactivés.
+  des détecteurs de fumée. Les entités météo et les commandes pour l'appairage
+  de produits sur la passerelle restent disponibles. Les autres registres
+  techniques, informations de firmware et commandes de maintenance/configuration
+  sont désactivés.
 
 Les entités désactivées restent dans le registre Home Assistant avec les mêmes
 identifiants. Réactivez celles dont vous avez besoin dans **Paramètres → Appareils

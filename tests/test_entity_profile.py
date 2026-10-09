@@ -265,6 +265,27 @@ class TestClassification(TestCase):
         self.assertFalse(self.classify(FakeEntity(essential=False)))
         self.assertTrue(self.classify(FakeEntity(category="config", essential=True)))
 
+    def test_gateway_association_controls_are_explicitly_essential(self):
+        """Keep the gateway pairing workflow despite its config category."""
+        tree = ast.parse((COMPONENT / "ha_entities.py").read_text(encoding="utf-8"))
+        association_base = next(
+            node
+            for node in tree.body
+            if isinstance(node, ast.ClassDef)
+            and node.name == "_GatewayAssociationEntity"
+        )
+        marker = next(
+            node
+            for node in association_base.body
+            if isinstance(node, ast.Assign)
+            and any(
+                isinstance(target, ast.Name)
+                and target.id == "entity_profile_essential"
+                for target in node.targets
+            )
+        )
+        self.assertIs(ast.literal_eval(marker.value), True)
+
 
 class TestRegistryModes(TestCase):
     """Check defaults, ownership, reversibility and individual choices."""
@@ -352,6 +373,29 @@ class TestRegistryModes(TestCase):
         self.assertIsNone(self.row("technical").disabled_by)
         self.assertEqual(self.row("gateway_removal").disabled_by, Disabler.INTEGRATION)
         self.assertEqual(ids_before, set(self.registry.entities))
+
+    def test_weather_entities_stay_enabled_in_simplified_mode(self):
+        """Keep the weather platform active regardless of entity category."""
+        self.entry.data = {"entity_mode": "simplified"}
+        self.profile = self.Profile(self.hass, self.entry)
+        self.add([FakeEntity("weather", category="diagnostic")], domain="weather")
+        self.assertIsNone(self.registry.entities["weather.weather"].disabled_by)
+
+    def test_weather_entities_disabled_by_the_old_profile_are_restored(self):
+        """Restore weather entities previously disabled as secondary."""
+        self.entry.data = {"entity_mode": "simplified"}
+        self.profile = self.Profile(self.hass, self.entry)
+        self.registry.entities["weather.weather"] = RegistryEntry(
+            "weather.weather",
+            "weather",
+            disabled_by=Disabler.INTEGRATION,
+            options={DOMAIN: {"secondary": True, "profile_disabled": True}},
+        )
+        self.add([FakeEntity("weather", category="diagnostic")], domain="weather")
+        row = self.registry.entities["weather.weather"]
+        self.assertIsNone(row.disabled_by)
+        self.assertFalse(row.options[DOMAIN]["secondary"])
+        self.assertFalse(row.options[DOMAIN]["profile_disabled"])
 
     def test_options_changes_apply_to_existing_entities_reversibly(self):
         """Change existing entities only on an explicit mode switch."""
@@ -448,6 +492,19 @@ class TestRegistryModes(TestCase):
         self.add([FakeEntity("temperature", essential=True)])
         self.assertIsNone(self.row("temperature").disabled_by)
         self.assertFalse(self.row("temperature").options[DOMAIN]["secondary"])
+
+    def test_gateway_pairing_controls_are_restored_when_promoted(self):
+        """Re-enable existing pairing controls when they become essential."""
+        self.add([FakeEntity("association_start", category="config")])
+        self.switch("simplified")
+        self.assertEqual(
+            self.row("association_start").disabled_by, Disabler.INTEGRATION
+        )
+        self.add(
+            [FakeEntity("association_start", category="config", essential=True)]
+        )
+        self.assertIsNone(self.row("association_start").disabled_by)
+        self.assertFalse(self.row("association_start").options[DOMAIN]["secondary"])
 
 
 class TestConfigValidation(IsolatedAsyncioTestCase):

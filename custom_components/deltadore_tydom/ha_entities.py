@@ -7512,6 +7512,7 @@ class _GatewayAssociationEntity:
     _attr_should_poll = False
     _attr_has_entity_name = True
     _attr_entity_category = EntityCategory.CONFIG
+    entity_profile_essential = True
 
     def __init__(self, tydom_hub) -> None:
         """Attach a control to its configured TYDOM gateway."""
