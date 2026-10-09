@@ -3314,6 +3314,11 @@ class HaClimate(ClimateEntity, HAEntity):
             if local_mode == "ABSENCE":
                 return PRESET_AWAY
             return PRESET_NONE if self._attr_preset_modes else None
+        if (
+            not self._device.is_area_trv
+            and getattr(self._device, "localMode", None) == "ABSENCE"
+        ):
+            return PRESET_AWAY
         if hasattr(self._device, "comfortMode"):
             comfort_mode = getattr(self._device, "comfortMode", None)
             if comfort_mode == "ANTI_FROST":
