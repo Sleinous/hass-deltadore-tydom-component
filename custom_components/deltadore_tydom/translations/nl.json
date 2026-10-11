@@ -8,16 +8,16 @@
                 "name": "Afwezigheidstemperatuur"
             },
             "absmaxcoolsetpoint": {
-                "name": "Maximale insteltemperatuur koeling"
+                "name": "Maximale insteltemperatuur voor koeling (apparaatlimiet)"
             },
             "absmaxheatsetpoint": {
-                "name": "Maximale insteltemperatuur verwarming"
+                "name": "Maximale insteltemperatuur voor verwarming (apparaatlimiet)"
             },
             "absmincoolsetpoint": {
-                "name": "Minimale insteltemperatuur koeling"
+                "name": "Minimale insteltemperatuur voor koeling (apparaatlimiet)"
             },
             "absminheatsetpoint": {
-                "name": "Minimale insteltemperatuur verwarming"
+                "name": "Minimale insteltemperatuur voor verwarming (apparaatlimiet)"
             },
             "ackeventcmd": {
                 "name": "Gebeurtenissen bevestigen"
@@ -1633,16 +1633,16 @@
                 "name": "Afwezigheidstemperatuur"
             },
             "absmaxcoolsetpoint": {
-                "name": "Maximale insteltemperatuur koeling"
+                "name": "Maximale insteltemperatuur voor koeling (apparaatlimiet)"
             },
             "absmaxheatsetpoint": {
-                "name": "Maximale insteltemperatuur verwarming"
+                "name": "Maximale insteltemperatuur voor verwarming (apparaatlimiet)"
             },
             "absmincoolsetpoint": {
-                "name": "Minimale insteltemperatuur koeling"
+                "name": "Minimale insteltemperatuur voor koeling (apparaatlimiet)"
             },
             "absminheatsetpoint": {
-                "name": "Minimale insteltemperatuur verwarming"
+                "name": "Minimale insteltemperatuur voor verwarming (apparaatlimiet)"
             },
             "ackeventcmd": {
                 "name": "Gebeurtenissen bevestigen"
@@ -2370,16 +2370,16 @@
                 "name": "Afwezigheidstemperatuur"
             },
             "absmaxcoolsetpoint": {
-                "name": "Maximale insteltemperatuur koeling"
+                "name": "Maximale insteltemperatuur voor koeling (apparaatlimiet)"
             },
             "absmaxheatsetpoint": {
-                "name": "Maximale insteltemperatuur verwarming"
+                "name": "Maximale insteltemperatuur voor verwarming (apparaatlimiet)"
             },
             "absmincoolsetpoint": {
-                "name": "Minimale insteltemperatuur koeling"
+                "name": "Minimale insteltemperatuur voor koeling (apparaatlimiet)"
             },
             "absminheatsetpoint": {
-                "name": "Minimale insteltemperatuur verwarming"
+                "name": "Minimale insteltemperatuur voor verwarming (apparaatlimiet)"
             },
             "ackeventcmd": {
                 "name": "Gebeurtenissen bevestigen"
@@ -3077,16 +3077,16 @@
                 "name": "Afwezigheidstemperatuur"
             },
             "absmaxcoolsetpoint": {
-                "name": "Maximale insteltemperatuur koeling"
+                "name": "Maximale insteltemperatuur voor koeling (apparaatlimiet)"
             },
             "absmaxheatsetpoint": {
-                "name": "Maximale insteltemperatuur verwarming"
+                "name": "Maximale insteltemperatuur voor verwarming (apparaatlimiet)"
             },
             "absmincoolsetpoint": {
-                "name": "Minimale insteltemperatuur koeling"
+                "name": "Minimale insteltemperatuur voor koeling (apparaatlimiet)"
             },
             "absminheatsetpoint": {
-                "name": "Minimale insteltemperatuur verwarming"
+                "name": "Minimale insteltemperatuur voor verwarming (apparaatlimiet)"
             },
             "ackeventcmd": {
                 "name": "Gebeurtenissen bevestigen"

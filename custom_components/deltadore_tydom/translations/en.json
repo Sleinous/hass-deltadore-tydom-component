@@ -446,16 +446,16 @@
                 "name": "Away temperature"
             },
             "absmaxcoolsetpoint": {
-                "name": "Maximum cooling setpoint"
+                "name": "Maximum cooling setpoint (device limit)"
             },
             "absmaxheatsetpoint": {
-                "name": "Maximum heating setpoint"
+                "name": "Maximum heating setpoint (device limit)"
             },
             "absmincoolsetpoint": {
-                "name": "Minimum cooling setpoint"
+                "name": "Minimum cooling setpoint (device limit)"
             },
             "absminheatsetpoint": {
-                "name": "Minimum heating setpoint"
+                "name": "Minimum heating setpoint (device limit)"
             },
             "ackeventcmd": {
                 "name": "Event acknowledgement command"
@@ -1153,16 +1153,16 @@
                 "name": "Away temperature"
             },
             "absmaxcoolsetpoint": {
-                "name": "Maximum cooling setpoint"
+                "name": "Maximum cooling setpoint (device limit)"
             },
             "absmaxheatsetpoint": {
-                "name": "Maximum heating setpoint"
+                "name": "Maximum heating setpoint (device limit)"
             },
             "absmincoolsetpoint": {
-                "name": "Minimum cooling setpoint"
+                "name": "Minimum cooling setpoint (device limit)"
             },
             "absminheatsetpoint": {
-                "name": "Minimum heating setpoint"
+                "name": "Minimum heating setpoint (device limit)"
             },
             "ackeventcmd": {
                 "name": "Event acknowledgement command"
@@ -1925,16 +1925,16 @@
                 "name": "Away temperature"
             },
             "absmaxcoolsetpoint": {
-                "name": "Maximum cooling setpoint"
+                "name": "Maximum cooling setpoint (device limit)"
             },
             "absmaxheatsetpoint": {
-                "name": "Maximum heating setpoint"
+                "name": "Maximum heating setpoint (device limit)"
             },
             "absmincoolsetpoint": {
-                "name": "Minimum cooling setpoint"
+                "name": "Minimum cooling setpoint (device limit)"
             },
             "absminheatsetpoint": {
-                "name": "Minimum heating setpoint"
+                "name": "Minimum heating setpoint (device limit)"
             },
             "ackeventcmd": {
                 "name": "Event acknowledgement command"
@@ -3550,16 +3550,16 @@
                 "name": "Away temperature"
             },
             "absmaxcoolsetpoint": {
-                "name": "Maximum cooling setpoint"
+                "name": "Maximum cooling setpoint (device limit)"
             },
             "absmaxheatsetpoint": {
-                "name": "Maximum heating setpoint"
+                "name": "Maximum heating setpoint (device limit)"
             },
             "absmincoolsetpoint": {
-                "name": "Minimum cooling setpoint"
+                "name": "Minimum cooling setpoint (device limit)"
             },
             "absminheatsetpoint": {
-                "name": "Minimum heating setpoint"
+                "name": "Minimum heating setpoint (device limit)"
             },
             "ackeventcmd": {
                 "name": "Event acknowledgement command"

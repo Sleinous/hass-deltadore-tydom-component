@@ -8,16 +8,16 @@
                 "name": "Temperatura podczas nieobecności"
             },
             "absmaxcoolsetpoint": {
-                "name": "Maksymalna temperatura zadana chłodzenia"
+                "name": "Maksymalna temperatura zadana chłodzenia (limit urządzenia)"
             },
             "absmaxheatsetpoint": {
-                "name": "Maksymalna temperatura zadana ogrzewania"
+                "name": "Maksymalna temperatura zadana ogrzewania (limit urządzenia)"
             },
             "absmincoolsetpoint": {
-                "name": "Minimalna temperatura zadana chłodzenia"
+                "name": "Minimalna temperatura zadana chłodzenia (limit urządzenia)"
             },
             "absminheatsetpoint": {
-                "name": "Minimalna temperatura zadana ogrzewania"
+                "name": "Minimalna temperatura zadana ogrzewania (limit urządzenia)"
             },
             "ackeventcmd": {
                 "name": "Polecenie potwierdzenia zdarzeń"
@@ -1633,16 +1633,16 @@
                 "name": "Temperatura podczas nieobecności"
             },
             "absmaxcoolsetpoint": {
-                "name": "Maksymalna temperatura zadana chłodzenia"
+                "name": "Maksymalna temperatura zadana chłodzenia (limit urządzenia)"
             },
             "absmaxheatsetpoint": {
-                "name": "Maksymalna temperatura zadana ogrzewania"
+                "name": "Maksymalna temperatura zadana ogrzewania (limit urządzenia)"
             },
             "absmincoolsetpoint": {
-                "name": "Minimalna temperatura zadana chłodzenia"
+                "name": "Minimalna temperatura zadana chłodzenia (limit urządzenia)"
             },
             "absminheatsetpoint": {
-                "name": "Minimalna temperatura zadana ogrzewania"
+                "name": "Minimalna temperatura zadana ogrzewania (limit urządzenia)"
             },
             "ackeventcmd": {
                 "name": "Polecenie potwierdzenia zdarzeń"
@@ -2370,16 +2370,16 @@
                 "name": "Temperatura podczas nieobecności"
             },
             "absmaxcoolsetpoint": {
-                "name": "Maksymalna temperatura zadana chłodzenia"
+                "name": "Maksymalna temperatura zadana chłodzenia (limit urządzenia)"
             },
             "absmaxheatsetpoint": {
-                "name": "Maksymalna temperatura zadana ogrzewania"
+                "name": "Maksymalna temperatura zadana ogrzewania (limit urządzenia)"
             },
             "absmincoolsetpoint": {
-                "name": "Minimalna temperatura zadana chłodzenia"
+                "name": "Minimalna temperatura zadana chłodzenia (limit urządzenia)"
             },
             "absminheatsetpoint": {
-                "name": "Minimalna temperatura zadana ogrzewania"
+                "name": "Minimalna temperatura zadana ogrzewania (limit urządzenia)"
             },
             "ackeventcmd": {
                 "name": "Polecenie potwierdzenia zdarzeń"
@@ -3077,16 +3077,16 @@
                 "name": "Temperatura podczas nieobecności"
             },
             "absmaxcoolsetpoint": {
-                "name": "Maksymalna temperatura zadana chłodzenia"
+                "name": "Maksymalna temperatura zadana chłodzenia (limit urządzenia)"
             },
             "absmaxheatsetpoint": {
-                "name": "Maksymalna temperatura zadana ogrzewania"
+                "name": "Maksymalna temperatura zadana ogrzewania (limit urządzenia)"
             },
             "absmincoolsetpoint": {
-                "name": "Minimalna temperatura zadana chłodzenia"
+                "name": "Minimalna temperatura zadana chłodzenia (limit urządzenia)"
             },
             "absminheatsetpoint": {
-                "name": "Minimalna temperatura zadana ogrzewania"
+                "name": "Minimalna temperatura zadana ogrzewania (limit urządzenia)"
             },
             "ackeventcmd": {
                 "name": "Polecenie potwierdzenia zdarzeń"

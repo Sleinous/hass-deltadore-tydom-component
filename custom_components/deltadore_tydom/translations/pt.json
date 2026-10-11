@@ -8,16 +8,16 @@
                 "name": "Temperatura de ausência"
             },
             "absmaxcoolsetpoint": {
-                "name": "Temperatura máxima de arrefecimento"
+                "name": "Temperatura máxima de arrefecimento (limite do dispositivo)"
             },
             "absmaxheatsetpoint": {
-                "name": "Temperatura máxima de aquecimento"
+                "name": "Temperatura máxima de aquecimento (limite do dispositivo)"
             },
             "absmincoolsetpoint": {
-                "name": "Temperatura mínima de arrefecimento"
+                "name": "Temperatura mínima de arrefecimento (limite do dispositivo)"
             },
             "absminheatsetpoint": {
-                "name": "Temperatura mínima de aquecimento"
+                "name": "Temperatura mínima de aquecimento (limite do dispositivo)"
             },
             "ackeventcmd": {
                 "name": "Comando de confirmação de eventos"
@@ -1633,16 +1633,16 @@
                 "name": "Temperatura de ausência"
             },
             "absmaxcoolsetpoint": {
-                "name": "Temperatura máxima de arrefecimento"
+                "name": "Temperatura máxima de arrefecimento (limite do dispositivo)"
             },
             "absmaxheatsetpoint": {
-                "name": "Temperatura máxima de aquecimento"
+                "name": "Temperatura máxima de aquecimento (limite do dispositivo)"
             },
             "absmincoolsetpoint": {
-                "name": "Temperatura mínima de arrefecimento"
+                "name": "Temperatura mínima de arrefecimento (limite do dispositivo)"
             },
             "absminheatsetpoint": {
-                "name": "Temperatura mínima de aquecimento"
+                "name": "Temperatura mínima de aquecimento (limite do dispositivo)"
             },
             "ackeventcmd": {
                 "name": "Comando de confirmação de eventos"
@@ -2370,16 +2370,16 @@
                 "name": "Temperatura de ausência"
             },
             "absmaxcoolsetpoint": {
-                "name": "Temperatura máxima de arrefecimento"
+                "name": "Temperatura máxima de arrefecimento (limite do dispositivo)"
             },
             "absmaxheatsetpoint": {
-                "name": "Temperatura máxima de aquecimento"
+                "name": "Temperatura máxima de aquecimento (limite do dispositivo)"
             },
             "absmincoolsetpoint": {
-                "name": "Temperatura mínima de arrefecimento"
+                "name": "Temperatura mínima de arrefecimento (limite do dispositivo)"
             },
             "absminheatsetpoint": {
-                "name": "Temperatura mínima de aquecimento"
+                "name": "Temperatura mínima de aquecimento (limite do dispositivo)"
             },
             "ackeventcmd": {
                 "name": "Comando de confirmação de eventos"
@@ -3077,16 +3077,16 @@
                 "name": "Temperatura de ausência"
             },
             "absmaxcoolsetpoint": {
-                "name": "Temperatura máxima de arrefecimento"
+                "name": "Temperatura máxima de arrefecimento (limite do dispositivo)"
             },
             "absmaxheatsetpoint": {
-                "name": "Temperatura máxima de aquecimento"
+                "name": "Temperatura máxima de aquecimento (limite do dispositivo)"
             },
             "absmincoolsetpoint": {
-                "name": "Temperatura mínima de arrefecimento"
+                "name": "Temperatura mínima de arrefecimento (limite do dispositivo)"
             },
             "absminheatsetpoint": {
-                "name": "Temperatura mínima de aquecimento"
+                "name": "Temperatura mínima de aquecimento (limite do dispositivo)"
             },
             "ackeventcmd": {
                 "name": "Comando de confirmação de eventos"
