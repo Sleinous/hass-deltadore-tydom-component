@@ -4111,14 +4111,32 @@ class HaAlarm(AlarmControlPanelEntity, HAEntity):
             current_state != previous_state
             and current_state in self._ACTOR_HISTORY_STATES
         )
+        actor_matches_state = bool(
+            actor
+            and actor_type
+            and actor_target
+            and self._actor_target_matches_state(actor_target, current_state)
+        )
+        if has_new_actor or state_changed:
+            device_id = getattr(self._device, "device_id", "unknown")
+            LOGGER.debug(
+                "Alarm actor correlation for %s: sequence=%s, new_actor=%s, "
+                "source=%s, target=%s, state=%s, previous_state=%s, "
+                "state_changed=%s, target_matches_state=%s",
+                device_id,
+                event_sequence,
+                bool(actor and actor_type),
+                actor_type,
+                actor_target,
+                current_state,
+                previous_state,
+                state_changed,
+                actor_matches_state,
+            )
         if state_changed:
             self._attr_changed_by = None
             self._changed_by_type = None
-            if (
-                actor
-                and actor_type
-                and self._actor_target_matches_state(actor_target, current_state)
-            ):
+            if actor_matches_state:
                 self._attr_changed_by = actor
                 self._changed_by_type = actor_type
                 self._pending_alarm_actor = None
@@ -4131,13 +4149,21 @@ class HaAlarm(AlarmControlPanelEntity, HAEntity):
             else:
                 self._pending_alarm_actor = None
         elif actor and actor_type and actor_target:
-            if self._actor_target_matches_state(actor_target, current_state):
+            if actor_matches_state:
                 self._attr_changed_by = actor
                 self._changed_by_type = actor_type
             else:
                 # TYDOM may publish eventAlarm just before alarmMode changes.
                 self._pending_alarm_actor = (actor_target, actor, actor_type)
 
+        if has_new_actor or state_changed:
+            LOGGER.debug(
+                "Alarm actor correlation result for %s: changed_by_source=%s, "
+                "pending_actor=%s",
+                getattr(self._device, "device_id", "unknown"),
+                self._changed_by_type,
+                self._pending_alarm_actor is not None,
+            )
         self.async_write_ha_state()
 
     def _schedule_open_issues_refresh(

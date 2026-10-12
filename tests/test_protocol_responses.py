@@ -1,6 +1,7 @@
 """Tests for Tydom protocol response handling."""
 
 import asyncio
+import ast
 import importlib.util
 from pathlib import Path
 import sys
@@ -71,6 +72,63 @@ TydomEnergy = devices_module.TydomEnergy
 TydomAlarm = devices_module.TydomAlarm
 TydomOpenIssuesNotReadyError = devices_module.TydomOpenIssuesNotReadyError
 
+
+class _AlarmControlPanelState:
+    """Minimal state constants used by the extracted alarm callback."""
+
+    DISARMED = "disarmed"
+    ARMED_AWAY = "armed_away"
+    ARMED_HOME = "armed_home"
+    ARMED_NIGHT = "armed_night"
+
+
+def _load_alarm_update_callback():
+    """Load the production actor callback without importing Home Assistant."""
+    source_path = root / "custom_components" / "deltadore_tydom" / "ha_entities.py"
+    module = ast.parse(source_path.read_text(encoding="utf-8"))
+    alarm_node = next(
+        node
+        for node in module.body
+        if isinstance(node, ast.ClassDef) and node.name == "HaAlarm"
+    )
+    methods = [
+        node
+        for node in alarm_node.body
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+        and node.name in {"_handle_alarm_update", "_actor_target_matches_state"}
+    ]
+    actor_states = next(
+        node
+        for node in alarm_node.body
+        if isinstance(node, ast.Assign)
+        and any(
+            isinstance(target, ast.Name) and target.id == "_ACTOR_HISTORY_STATES"
+            for target in node.targets
+        )
+    )
+    isolated_module = ast.Module(
+        body=[
+            ast.ClassDef(
+                name="Harness",
+                bases=[],
+                keywords=[],
+                body=[actor_states, *methods],
+                decorator_list=[],
+            )
+        ],
+        type_ignores=[],
+    )
+    ast.fix_missing_locations(isolated_module)
+    namespace = {
+        "AlarmControlPanelState": _AlarmControlPanelState,
+        "LOGGER": MagicMock(),
+    }
+    exec(compile(isolated_module, source_path, "exec"), namespace)
+    return namespace["Harness"]
+
+
+_ALARM_UPDATE_CALLBACK = _load_alarm_update_callback()
+
 for name, original in _original_modules.items():
     if original is _MISSING:
         sys.modules.pop(name, None)
@@ -118,6 +176,97 @@ class ProtocolResponseTests(IsolatedAsyncioTestCase):
         handler_module.device_name.clear()
         handler_module.device_type.clear()
         handler_module.device_command_metadata.clear()
+
+    def _alarm_entity(self, stored: TydomAlarm, state: str):
+        """Bind the production alarm callback to a stored protocol device."""
+        entity = _ALARM_UPDATE_CALLBACK()
+        entity._device = stored
+        entity.alarm_state = state
+        entity._last_alarm_state = state
+        entity._attr_changed_by = None
+        entity._changed_by_type = None
+        entity._pending_alarm_actor = None
+        entity._last_alarm_event_sequence = stored.alarm_event_sequence
+        entity.async_write_ha_state = MagicMock()
+        stored.register_callback(entity._handle_alarm_update)
+        return entity
+
+    async def _parse_alarm_actor_event(self, event: dict) -> TydomAlarm:
+        """Parse a pushed eventAlarm cdata message as the websocket handler does."""
+        handler = MessageHandler(MagicMock(), b"")
+        handler_module.device_name["10_20"] = "Alarm"
+        handler_module.device_type["10_20"] = "alarm"
+        devices = await handler.parse_devices_cdata(
+            [
+                {
+                    "id": 20,
+                    "endpoints": [
+                        {
+                            "id": 10,
+                            "error": 0,
+                            "cdata": [
+                                {
+                                    "name": "eventAlarm",
+                                    "parameters": {},
+                                    "values": {"event": event},
+                                }
+                            ],
+                        }
+                    ],
+                }
+            ],
+            "0",
+        )
+        self.assertEqual(len(devices), 1)
+        return devices[0]
+
+    async def test_late_zone_arm_event_updates_alarm_entity(self) -> None:
+        """A pushed marcheZone actor updates changed_by after state arrives first."""
+        client = MagicMock()
+        stored = TydomAlarm(client, "10_20", "20", "Alarm", "alarm", "10", {}, {})
+        entity = self._alarm_entity(stored, _AlarmControlPanelState.DISARMED)
+
+        # The /devices/data alarmMode transition reaches HA before eventAlarm.
+        entity.alarm_state = _AlarmControlPanelState.ARMED_HOME
+        entity._handle_alarm_update()
+        self.assertIsNone(entity._attr_changed_by)
+
+        incoming = await self._parse_alarm_actor_event(
+            {
+                "name": "marcheZone",
+                "date": "2026-10-11T19:44:56",
+                "accessCode": {"nameCustom": "Person C"},
+            }
+        )
+        # This is the stored_device.update_device step in the hub dispatch path.
+        await stored.update_device(incoming)
+
+        self.assertEqual(entity._attr_changed_by, "Person C")
+        self.assertEqual(entity._changed_by_type, "access_code")
+
+    async def test_late_disarm_event_updates_alarm_entity(self) -> None:
+        """A pushed arret actor updates changed_by after state arrives first."""
+        client = MagicMock()
+        stored = TydomAlarm(client, "10_20", "20", "Alarm", "alarm", "10", {}, {})
+        entity = self._alarm_entity(stored, _AlarmControlPanelState.ARMED_HOME)
+
+        # The /devices/data alarmMode transition reaches HA before eventAlarm.
+        entity.alarm_state = _AlarmControlPanelState.DISARMED
+        entity._handle_alarm_update()
+        self.assertIsNone(entity._attr_changed_by)
+
+        incoming = await self._parse_alarm_actor_event(
+            {
+                "name": "arret",
+                "date": "2026-10-11T19:45:23",
+                "accessCode": {"nameCustom": "Person C"},
+            }
+        )
+        # This is the stored_device.update_device step in the hub dispatch path.
+        await stored.update_device(incoming)
+
+        self.assertEqual(entity._attr_changed_by, "Person C")
+        self.assertEqual(entity._changed_by_type, "access_code")
 
     async def test_alarm_command_metadata_is_retained_by_endpoint(self) -> None:
         """Command capabilities must remain available to alarm entities."""

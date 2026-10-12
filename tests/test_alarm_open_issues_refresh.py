@@ -86,7 +86,10 @@ def _load_alarm_update_helpers():
         type_ignores=[],
     )
     ast.fix_missing_locations(isolated_module)
-    namespace = {"AlarmControlPanelState": _AlarmControlPanelState}
+    namespace = {
+        "AlarmControlPanelState": _AlarmControlPanelState,
+        "LOGGER": _Logger,
+    }
     exec(compile(isolated_module, source_path, "exec"), namespace)
     return namespace["Harness"]
 

@@ -1487,6 +1487,14 @@ class TydomAlarm(TydomDevice):
                 self._latest_alarm_actor, self._latest_alarm_actor_type = actor_details
                 self._latest_alarm_event_target = target
                 self._alarm_event_sequence += 1
+                LOGGER.debug(
+                    "Captured alarm actor event for %s "
+                    "(source=%s, target=%s, sequence=%s)",
+                    self.device_id,
+                    self._latest_alarm_actor_type,
+                    target,
+                    self._alarm_event_sequence,
+                )
         await super().update_device(device)
 
     def is_legacy_alarm(self) -> bool:
