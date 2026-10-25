@@ -294,6 +294,12 @@ Les demandes de mode et de préréglage publient leur état d’attente sur ce c
 
 Si l’envoi échoue, la consigne affichée revient à la dernière valeur remontée par TYDOM. Après deux minutes sans retour correspondant, le statut devient `unconfirmed`, l’indicateur se désactive et la consigne affichée revient à la valeur remontée. Cela ne prouve pas que la commande a échoué ; un retour ultérieur peut encore la confirmer. Aucune nouvelle commande n’est envoyée automatiquement. Les valeurs demandées et `command_status` sont aussi disponibles dans les attributs climate. Les demandes en attente sont effacées au déchargement de l’intégration.
 
+### Mode général de chauffage et de climatisation
+
+Sur les passerelles compatibles, **Mode général** apparaît dans la section **Commandes** de la fiche de la passerelle. Ce contrôle est distinct des entités climate des Tybox, Tywell Control et autres zones. Les choix proviennent des capacités annoncées par la passerelle : Arrêt, Chauffage et, lorsqu’ils sont pris en charge, Climatisation, Ventilation ou Déshumidification. Absence utilise la commande générale d’absence distincte ; choisir un mode normal désactive d’abord l’Absence générale. Les absences temporisées existantes sont affichées sans modifier leur échéance.
+
+Le contrôle suit l’état remonté par la passerelle. Mixte est un état d’affichage agrégé, jamais une commande de chauffage ou de climatisation. Les demandes générales utilisent directement les ressources de la passerelle ; elles ne réécrivent pas les consignes et n’envoient pas une série de commandes aux zones. Les firmwares qui ne disposent pas de ces ressources facultatives n’exposent pas de contrôle général trompeur.
+
 ### Entités de diagnostic
 
 Les compteurs internes (`activationCpt`, `activationIndex`, `indexTimeOn`,
