@@ -8025,7 +8025,8 @@ class _GatewayAssociationEntity:
         self._hub = tydom_hub
         self._attr_device_info = DeviceInfo(
             identifiers={(DOMAIN, tydom_hub.hub_id)},
-            name=tydom_hub._name,
+            # Match the gateway entity's canonical name, regardless of load order.
+            name=tydom_hub.hub_id,
             manufacturer=tydom_hub.manufacturer,
         )
 
@@ -8553,7 +8554,7 @@ class HAReloadButton(ButtonEntity):
         self._attr_name = "Recharger les appareils"
         self._attr_device_info = DeviceInfo(
             identifiers={(DOMAIN, hub.hub_id)},
-            name=hub._name,
+            name=hub.hub_id,
             manufacturer=hub.manufacturer,
         )
         hub.register_association_control(self)
