@@ -822,6 +822,15 @@
         },
         "resume_target_unknown": {
             "message": "Denne sonen er fortsatt i frostbeskyttelse, og ingen bekreftet måltemperatur er kjent. Velg en temperatur med handlingen climate.set_temperature for å starte den igjen. Den generelle varme-/kjølemodusen må være aktivert."
+        },
+        "scheduled_temperature_read_only": {
+            "message": "Bytt til varmemodus før du endrer temperaturen mens tidsplanen følges."
+        },
+        "invalid_target_temperature": {
+            "message": "Måltemperaturen må være et endelig tall."
+        },
+        "target_temperature_out_of_range": {
+            "message": "Den ønskede temperaturen {temperature} er utenfor enhetens grenser ({minimum} til {maximum})."
         }
     }
 }

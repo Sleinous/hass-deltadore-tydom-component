@@ -822,6 +822,15 @@
         },
         "resume_target_unknown": {
             "message": "Tato zóna je stále v protimrazovém režimu a není známa potvrzená cílová teplota. Pro obnovení zvolte teplotu pomocí akce climate.set_temperature. Obecný režim vytápění/chlazení musí být zapnutý."
+        },
+        "scheduled_temperature_read_only": {
+            "message": "Před změnou teploty při řízení podle programu přepněte do režimu vytápění."
+        },
+        "invalid_target_temperature": {
+            "message": "Cílová teplota musí být konečné číslo."
+        },
+        "target_temperature_out_of_range": {
+            "message": "Požadovaná teplota {temperature} je mimo limity zařízení ({minimum} až {maximum})."
         }
     }
 }
