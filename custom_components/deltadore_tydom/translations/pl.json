@@ -3935,6 +3935,15 @@
         },
         "target_temperature_out_of_range": {
             "message": "Żądana temperatura {temperature} jest poza limitami urządzenia (od {minimum} do {maximum})."
+        },
+        "general_hvac_absence": {
+            "message": "Ogólny tryb nieobecności jest aktywny. Wyłącz go w TYDOM lub za pomocą ogólnego sterowania bramką przed sterowaniem tą strefą."
+        },
+        "general_hvac_stopped": {
+            "message": "Ogólny tryb ogrzewania/klimatyzacji jest wyłączony. Włącz go w TYDOM lub za pomocą ogólnego sterowania bramką przed sterowaniem tą strefą."
+        },
+        "resume_target_unknown": {
+            "message": "Ta strefa nadal działa w trybie ochrony przed zamarzaniem i nie jest znana potwierdzona temperatura zadana. Wybierz temperaturę za pomocą akcji climate.set_temperature, aby ją uruchomić. Ogólny tryb ogrzewania/chłodzenia musi być włączony."
         }
     },
     "device": {

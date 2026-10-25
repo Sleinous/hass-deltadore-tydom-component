@@ -221,6 +221,21 @@
         },
         "unsupported_stored_pin_alarm_mode": {
             "message": "Choisissez Absent, Présent, Nuit ou Désarmer pour l'action utilisant le PIN mémorisé."
+        },
+        "invalid_target_temperature": {
+            "message": "La température de consigne doit être un nombre fini."
+        },
+        "target_temperature_out_of_range": {
+            "message": "La température demandée {temperature} est hors des limites de l’appareil ({minimum} à {maximum})."
+        },
+        "general_hvac_absence": {
+            "message": "Le mode Absence général est actif. Désactivez-le dans TYDOM ou avec la commande générale de la passerelle avant de piloter cette zone."
+        },
+        "general_hvac_stopped": {
+            "message": "Le mode général de chauffage/climatisation est sur Arrêt. Réactivez-le dans TYDOM ou avec la commande générale de la passerelle avant de piloter cette zone."
+        },
+        "resume_target_unknown": {
+            "message": "Cette zone reste en hors-gel et aucune consigne confirmée n’est connue. Choisissez une température avec l’action climate.set_temperature pour la relancer. Le mode général de chauffage/climatisation doit être activé."
         }
     },
     "services": {
@@ -238,7 +253,10 @@
             "name": "Régler l'alarme avec le PIN mémorisé",
             "description": "Armer ou désarmer avec le PIN enregistré dans les paramètres de l'intégration TYDOM de cette alarme. Les utilisateurs autorisés à appeler cette action n'ont pas à le ressaisir. La demande de code du panneau et les vérifications d'armement normal restent inchangées.",
             "fields": {
-                "mode": {"name": "Mode d'alarme", "description": "Utiliser les zones configurées pour Absent, Présent ou Nuit, ou désarmer l'alarme."}
+                "mode": {
+                    "name": "Mode d'alarme",
+                    "description": "Utiliser les zones configurées pour Absent, Présent ou Nuit, ou désarmer l'alarme."
+                }
             }
         },
         "acknowledge_events": {
@@ -4298,14 +4316,6 @@
             "association_name": {
                 "name": "Nom de l’appareil (facultatif)"
             }
-        }
-    },
-    "exceptions": {
-        "invalid_target_temperature": {
-            "message": "La température de consigne doit être un nombre fini."
-        },
-        "target_temperature_out_of_range": {
-            "message": "La température demandée {temperature} est hors des limites de l’appareil ({minimum} à {maximum})."
         }
     },
     "device": {

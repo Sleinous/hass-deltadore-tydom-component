@@ -194,8 +194,14 @@
             "name": "Force arm alarm",
             "description": "Explicitly force an alarm mode despite defects that caused normal arming to be refused.",
             "fields": {
-                "code": {"name": "TYXAL user code", "description": "User code authorised to arm the alarm."},
-                "mode": {"name": "Arming mode", "description": "Configured Home Assistant alarm mode to force."}
+                "code": {
+                    "name": "TYXAL user code",
+                    "description": "User code authorised to arm the alarm."
+                },
+                "mode": {
+                    "name": "Arming mode",
+                    "description": "Configured Home Assistant alarm mode to force."
+                }
             }
         },
         "get_events": {
@@ -216,41 +222,74 @@
             "name": "Get alarm product configuration",
             "description": "Retrieve the active state and zone assignment of a TYXAL alarm product while the CS8000 is in maintenance mode.",
             "fields": {
-                "code": {"name": "TYXAL installer code", "description": "Installer code used while the CS8000 is in maintenance mode."},
-                "product_id": {"name": "Product ID", "description": "Identifier returned by Get alarm products and zones."}
+                "code": {
+                    "name": "TYXAL installer code",
+                    "description": "Installer code used while the CS8000 is in maintenance mode."
+                },
+                "product_id": {
+                    "name": "Product ID",
+                    "description": "Identifier returned by Get alarm products and zones."
+                }
             }
         },
         "enter_alarm_maintenance": {
             "name": "Enter alarm maintenance mode",
             "description": "Put a disarmed TYXAL CS8000 into maintenance mode before reading or changing its configuration.",
             "fields": {
-                "code": {"name": "TYXAL installer code", "description": "Installer code for the CS8000. Do not use an ordinary user alarm code."}
+                "code": {
+                    "name": "TYXAL installer code",
+                    "description": "Installer code for the CS8000. Do not use an ordinary user alarm code."
+                }
             }
         },
         "exit_alarm_maintenance": {
             "name": "Exit alarm maintenance mode",
             "description": "Return a TYXAL CS8000 from maintenance mode to its normal disarmed state.",
             "fields": {
-                "code": {"name": "TYXAL installer code", "description": "Installer code for the CS8000."}
+                "code": {
+                    "name": "TYXAL installer code",
+                    "description": "Installer code for the CS8000."
+                }
             }
         },
         "configure_alarm_product": {
             "name": "Configure alarm product",
             "description": "Enable or disable a TYXAL product and change its zone assignment.",
             "fields": {
-                "code": {"name": "TYXAL installer code", "description": "Installer code used while the CS8000 is in maintenance mode."},
-                "product_id": {"name": "Product ID", "description": "Identifier returned by Get alarm products and zones."},
-                "active": {"name": "Active", "description": "Whether the product should participate in the alarm system."},
-                "zone": {"name": "Zone", "description": "Zone to which the product should be assigned."}
+                "code": {
+                    "name": "TYXAL installer code",
+                    "description": "Installer code used while the CS8000 is in maintenance mode."
+                },
+                "product_id": {
+                    "name": "Product ID",
+                    "description": "Identifier returned by Get alarm products and zones."
+                },
+                "active": {
+                    "name": "Active",
+                    "description": "Whether the product should participate in the alarm system."
+                },
+                "zone": {
+                    "name": "Zone",
+                    "description": "Zone to which the product should be assigned."
+                }
             }
         },
         "rename_alarm_zone": {
             "name": "Rename alarm zone",
             "description": "Change the custom name of one TYXAL alarm zone, or clear it by supplying an empty name.",
             "fields": {
-                "code": {"name": "TYXAL installer code", "description": "Installer code used while the CS8000 is in maintenance mode."},
-                "zone_id": {"name": "Zone ID", "description": "Identifier returned by Get alarm products and zones."},
-                "name": {"name": "Zone name", "description": "New custom name for the zone. Supply an empty string to clear its custom or standard label."}
+                "code": {
+                    "name": "TYXAL installer code",
+                    "description": "Installer code used while the CS8000 is in maintenance mode."
+                },
+                "zone_id": {
+                    "name": "Zone ID",
+                    "description": "Identifier returned by Get alarm products and zones."
+                },
+                "name": {
+                    "name": "Zone name",
+                    "description": "New custom name for the zone. Supply an empty string to clear its custom or standard label."
+                }
             }
         },
         "reload_devices": {
@@ -364,11 +403,21 @@
             }
         },
         "sensor": {
-            "tywell_weather_condition": {"name": "Počasí"},
-            "tywell_weather_outdoor_temperature": {"name": "Venkovní teplota"},
-            "tywell_weather_daily_power": {"name": "Denní výkon"},
-            "tywell_weather_power": {"name": "Výkon"},
-            "tywell_weather_max_daily_outdoor_temperature": {"name": "Maximální denní venkovní teplota"},
+            "tywell_weather_condition": {
+                "name": "Počasí"
+            },
+            "tywell_weather_outdoor_temperature": {
+                "name": "Venkovní teplota"
+            },
+            "tywell_weather_daily_power": {
+                "name": "Denní výkon"
+            },
+            "tywell_weather_power": {
+                "name": "Výkon"
+            },
+            "tywell_weather_max_daily_outdoor_temperature": {
+                "name": "Maximální denní venkovní teplota"
+            },
             "pending_alarm_events": {
                 "name": "Pending alarm events"
             },
@@ -751,5 +800,16 @@
         },
         "group": {},
         "moment": {}
+    },
+    "exceptions": {
+        "general_hvac_absence": {
+            "message": "Celkový režim nepřítomnosti je aktivní. Před ovládáním této zóny jej vypněte v TYDOM nebo pomocí celkového ovládání brány."
+        },
+        "general_hvac_stopped": {
+            "message": "Celkový režim vytápění/klimatizace je vypnutý. Před ovládáním této zóny jej zapněte v TYDOM nebo pomocí celkového ovládání brány."
+        },
+        "resume_target_unknown": {
+            "message": "Tato zóna je stále v protimrazovém režimu a není známa potvrzená cílová teplota. Pro obnovení zvolte teplotu pomocí akce climate.set_temperature. Obecný režim vytápění/chlazení musí být zapnutý."
+        }
     }
 }

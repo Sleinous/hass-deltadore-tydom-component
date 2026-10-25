@@ -220,6 +220,21 @@
         },
         "unsupported_stored_pin_alarm_mode": {
             "message": "Choose Away, Home, Night or Disarm for the stored-PIN action."
+        },
+        "invalid_target_temperature": {
+            "message": "The target temperature must be a finite number."
+        },
+        "target_temperature_out_of_range": {
+            "message": "The requested temperature {temperature} is outside the device limits ({minimum} to {maximum})."
+        },
+        "general_hvac_absence": {
+            "message": "General Away mode is active. End it in TYDOM or with the gateway's general control before controlling this zone."
+        },
+        "general_hvac_stopped": {
+            "message": "The general heating/air conditioning mode is Off. Enable it in TYDOM or with the gateway's general control before controlling this zone."
+        },
+        "resume_target_unknown": {
+            "message": "This zone is still in frost protection and no confirmed target temperature is known. Choose a temperature with the climate.set_temperature action to resume it. The general heating/air conditioning mode must be enabled."
         }
     },
     "services": {
@@ -237,7 +252,10 @@
             "name": "Set alarm mode using the stored PIN",
             "description": "Arm or disarm using the PIN saved in this alarm's TYDOM integration settings. Authorised callers do not need to enter it again. The alarm panel's code request and normal arming checks remain unchanged.",
             "fields": {
-                "mode": {"name": "Alarm mode", "description": "Use the configured Away, Home or Night zones, or disarm the alarm."}
+                "mode": {
+                    "name": "Alarm mode",
+                    "description": "Use the configured Away, Home or Night zones, or disarm the alarm."
+                }
             }
         },
         "acknowledge_events": {
@@ -4297,14 +4315,6 @@
             "association_name": {
                 "name": "Device name (optional)"
             }
-        }
-    },
-    "exceptions": {
-        "invalid_target_temperature": {
-            "message": "The target temperature must be a finite number."
-        },
-        "target_temperature_out_of_range": {
-            "message": "The requested temperature {temperature} is outside the device limits ({minimum} to {maximum})."
         }
     },
     "device": {

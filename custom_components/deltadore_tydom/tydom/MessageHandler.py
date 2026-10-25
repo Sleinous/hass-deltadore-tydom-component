@@ -39,6 +39,7 @@ from .tydom_devices import (
     TydomScene,
     is_binary_tyxia_receiver_profile,
     is_physical_tywell_control_profile,
+    is_tywell_control_type,
     resolve_device_model,
 )
 
@@ -2006,16 +2007,19 @@ class MessageHandler:
                         # An endpoint that exposes a writable ``comfortMode``
                         # drives its own thermostat (heat/cool/stop) directly, so
                         # its ``/devices/data`` state and setpoints are
-                        # authoritative. Such a thermostat must not be bound to
-                        # the area it is merely grouped into: the area aggregates
-                        # a zone and can report a different/stale mode (e.g. a
-                        # Tybox Home RF 210 reporting COOLING on its endpoint
-                        # while the area still reads HEATING), which otherwise
-                        # shadows the real state and routes commands to the wrong
-                        # target. (#463)
-                        endpoint_controls_own_thermostat = _has_writable_comfort_mode(
-                            device_metadata.get(unique_id)
-                        )
+                        # authoritative. Keep its thermostat control on that
+                        # endpoint; the linked area aggregates a zone and can
+                        # report a different/stale mode (e.g. a Tybox Home RF
+                        # 210 reporting COOLING while the area still reads
+                        # HEATING). Its sensor telemetry can still be useful.
+                        # (#463)
+                        # RE2020 wall controllers operate their linked area,
+                        # even when their endpoint advertises comfortMode.
+                        # Independent Tybox/Typass thermostats retain endpoint
+                        # ownership and their own mode feedback (#463).
+                        endpoint_controls_own_thermostat = not is_tywell_control_type(
+                            type_of_id
+                        ) and _has_writable_comfort_mode(device_metadata.get(unique_id))
                         if (
                             isinstance(link, dict)
                             and link.get("type") == "area"

@@ -3935,6 +3935,15 @@
         },
         "target_temperature_out_of_range": {
             "message": "De gevraagde temperatuur {temperature} valt buiten de apparaatgrenzen ({minimum} tot {maximum})."
+        },
+        "general_hvac_absence": {
+            "message": "De algemene afwezigheidsmodus is actief. Schakel deze in TYDOM of via de algemene bediening van de gateway uit voordat u deze zone bedient."
+        },
+        "general_hvac_stopped": {
+            "message": "De algemene verwarmings-/airconditioningmodus staat uit. Schakel deze in TYDOM of via de algemene bediening van de gateway in voordat u deze zone bedient."
+        },
+        "resume_target_unknown": {
+            "message": "Deze zone staat nog op vorstbeveiliging en er is geen bevestigde doeltemperatuur bekend. Kies een temperatuur met de actie climate.set_temperature om de zone te hervatten. De algemene verwarmings-/koelmodus moet ingeschakeld zijn."
         }
     },
     "device": {
