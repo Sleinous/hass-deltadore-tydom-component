@@ -3956,6 +3956,9 @@
         },
         "resume_target_unknown": {
             "message": "Esta zona sigue en protección contra heladas y no se conoce ninguna temperatura de consigna confirmada. Elija una temperatura con la acción climate.set_temperature para reactivarla. El modo general de calefacción/climatización debe estar activado."
+        },
+        "scheduled_temperature_read_only": {
+            "message": "Cambie al modo Calor antes de modificar la temperatura mientras se sigue la programación."
         }
     },
     "device": {

@@ -3956,6 +3956,9 @@
         },
         "resume_target_unknown": {
             "message": "Diese Zone befindet sich noch im Frostschutz und es ist keine bestätigte Solltemperatur bekannt. Wählen Sie mit der Aktion climate.set_temperature eine Temperatur, um sie wieder zu starten. Der allgemeine Heiz-/Kühlmodus muss aktiviert sein."
+        },
+        "scheduled_temperature_read_only": {
+            "message": "Wechseln Sie in den Heizmodus, bevor Sie eine Temperatur während des Zeitprogramms ändern."
         }
     },
     "device": {

@@ -657,7 +657,6 @@ class GenericSensor(SensorEntity):
         "jobsRM",
         "indexTimeOn",
         "timeOnCpt",
-        "loadSheddingOn",
         "maintenanceNeeded",
         # TYDOM gateway firmware, protocol and registration telemetry.
         "apiMode",
@@ -3013,6 +3012,9 @@ class HaClimate(ClimateEntity, HAEntity):
         # otherwise read or write thermicLevel instead of localMode. The mixed
         # profile detected above uses thermicLevel only for its advertised
         # comfort presets, without changing localMode's HVAC role.
+        self._uses_scheduled_local_mode = (
+            self._uses_local_mode and self._device.uses_scheduled_local_mode
+        )
         self._is_filpilote = (
             not self._uses_local_mode
             and has_pilot_wire_command
@@ -3041,6 +3043,8 @@ class HaClimate(ClimateEntity, HAEntity):
             # modes; only the legacy heating-only zones reduce this list.
             if not self._device.uses_area_local_mode:
                 self._attr_hvac_modes = [HVACMode.OFF, HVACMode.HEAT]
+            if self._uses_scheduled_local_mode:
+                self._attr_hvac_modes.append(HVACMode.AUTO)
             # Replace any presets derived above.  These zones have no comfort
             # or eco order: comfortMode is the write-only season register, so
             # the generic extraction finds nothing usable and falls back to a
@@ -3054,7 +3058,10 @@ class HaClimate(ClimateEntity, HAEntity):
                     self._attr_preset_modes.append(PRESET_ECO)
                 if "COMFORT" in thermic_level_values:
                     self._attr_preset_modes.append(PRESET_COMFORT)
-            if self._device.uses_area_local_mode or "ABSENCE" in self._local_mode_values:
+            if (
+                self._device.uses_area_local_mode
+                or "ABSENCE" in self._local_mode_values
+            ):
                 self._attr_preset_modes.extend([PRESET_NONE, PRESET_AWAY])
             elif self._uses_local_mode_thermic_presets:
                 self._attr_preset_modes.append(PRESET_NONE)
@@ -3107,6 +3114,8 @@ class HaClimate(ClimateEntity, HAEntity):
                 | ClimateEntityFeature.FAN_MODE
             )
         if not self._device.is_area_trv:
+            if self._uses_scheduled_local_mode and self.hvac_mode == HVACMode.AUTO:
+                return features & ~ClimateEntityFeature.TARGET_TEMPERATURE
             return features
 
         return (features | ClimateEntityFeature.TARGET_TEMPERATURE) & ~(
@@ -3337,7 +3346,9 @@ class HaClimate(ClimateEntity, HAEntity):
             local_mode = getattr(self._device, "localMode", None)
             # localMode is the zone's on/off order. A separate thermicLevel
             # frost-protection switch must not turn an enabled zone Off (#540).
-            if local_mode in self.OFF_LOCAL_MODES:
+            if local_mode == "STOP" or (
+                local_mode == "ANTI_FROST" and not self._uses_scheduled_local_mode
+            ):
                 return HVACMode.OFF
             if local_mode is not None:
                 authorization = getattr(self._device, "authorization", None)
@@ -3345,6 +3356,11 @@ class HaClimate(ClimateEntity, HAEntity):
                     return HVACMode.OFF
                 if self._device.uses_area_local_mode and authorization == "COOLING":
                     return HVACMode.COOL
+                if (
+                    self._uses_scheduled_local_mode
+                    and getattr(self._device, "useMode", None) == "SCHED"
+                ):
+                    return HVACMode.AUTO
                 return HVACMode.HEAT
 
         if self._uses_comfort_mode_pilot_wire:
@@ -3420,8 +3436,19 @@ class HaClimate(ClimateEntity, HAEntity):
             # The app's frost switch is distinct from localMode. It can
             # withdraw every setpoint while leaving the zone enabled. Without
             # an active target, do not claim that the zone is delivering heat.
-            if getattr(self._device, "thermicLevel", None) == "ANTI_FROST":
+            if (
+                not self._uses_scheduled_local_mode
+                and getattr(self._device, "thermicLevel", None) == "ANTI_FROST"
+            ):
                 return HVACAction.IDLE
+            if self._uses_scheduled_local_mode:
+                if getattr(self._device, "loadSheddingOn", False) is True:
+                    return HVACAction.IDLE
+                if (
+                    getattr(self._device, "openingDetected", False) is True
+                    and getattr(self._device, "antiFrostWhenOff", None) is False
+                ):
+                    return HVACAction.IDLE
 
         authorization = getattr(self._device, "authorization", None)
         thermic_level = getattr(self._device, "thermicLevel", None)
@@ -3490,6 +3517,12 @@ class HaClimate(ClimateEntity, HAEntity):
         """Return the actual target reported by TYDOM, without pending requests."""
         if self._device.general_control_lock == "off":
             return None
+        if self._uses_scheduled_local_mode:
+            register = self._device._active_local_mode_setpoint()
+            if register is not None:
+                value = getattr(self._device, register, None)
+                if value is not None:
+                    return float(value)
         if self._uses_local_mode:
             if self._resolve_hvac_mode() == HVACMode.OFF:
                 return None
@@ -3568,6 +3601,7 @@ class HaClimate(ClimateEntity, HAEntity):
 
         if (
             self._uses_local_mode
+            and not self._uses_scheduled_local_mode
             and hvac_mode in (HVACMode.HEAT, HVACMode.COOL)
             and getattr(self._device, "localMode", None) == "NORMAL"
             and getattr(self._device, "thermicLevel", None) in self.OFF_LOCAL_MODES
@@ -3628,10 +3662,30 @@ class HaClimate(ClimateEntity, HAEntity):
                     "hvac_mode", hvac_mode, self._device.set_thermic_level("COMFORT")
                 )
             return
+        if self._uses_scheduled_local_mode and hvac_mode in (
+            HVACMode.OFF,
+            HVACMode.HEAT,
+            HVACMode.AUTO,
+        ):
+
+            async def set_scheduled_zone_mode() -> None:
+                if hvac_mode == HVACMode.OFF:
+                    await self._device.set_local_mode("STOP")
+                    return
+
+                if getattr(self._device, "localMode", None) != "NORMAL":
+                    await self._device.set_local_mode("NORMAL")
+                use_mode = "SCHED" if hvac_mode == HVACMode.AUTO else "MANUAL"
+                if getattr(self._device, "useMode", None) != use_mode:
+                    await self._device.set_use_mode(use_mode)
+
+            await self._async_track_command(
+                "hvac_mode", hvac_mode, set_scheduled_zone_mode()
+            )
+            return
         if self._uses_local_mode and hvac_mode in (HVACMode.OFF, HVACMode.HEAT):
-            # Drive the same register the app does.  Writing comfortMode STOP
-            # instead would stop the zone through the season register, which is
-            # not the state the app's on/off button produces.
+            # Keep the established app-compatible behaviour for localMode
+            # zones that do not advertise the separate schedule/manual register.
             await self._async_track_command(
                 "hvac_mode",
                 hvac_mode,
@@ -3842,6 +3896,14 @@ class HaClimate(ClimateEntity, HAEntity):
 
     async def async_set_temperature(self, **kwargs):
         """Set new target temperature."""
+        self._device.validate_general_hvac_mode()
+        if self._uses_scheduled_local_mode and self.hvac_mode == HVACMode.AUTO:
+            raise HomeAssistantError(
+                "Switch to Heat mode before changing a temperature while following the schedule.",
+                translation_domain=DOMAIN,
+                translation_key="scheduled_temperature_read_only",
+            )
+
         temperature = kwargs.get(ATTR_TEMPERATURE)
         self._device.validate_temperature(temperature)
         if self._device.is_area_trv:

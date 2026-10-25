@@ -236,6 +236,9 @@
         },
         "resume_target_unknown": {
             "message": "Cette zone reste en hors-gel et aucune consigne confirmée n’est connue. Choisissez une température avec l’action climate.set_temperature pour la relancer. Le mode général de chauffage/climatisation doit être activé."
+        },
+        "scheduled_temperature_read_only": {
+            "message": "Passez en mode Chauffage avant de modifier la consigne lorsque le programme est suivi."
         }
     },
     "services": {

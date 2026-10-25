@@ -3956,6 +3956,9 @@
         },
         "resume_target_unknown": {
             "message": "Deze zone staat nog op vorstbeveiliging en er is geen bevestigde doeltemperatuur bekend. Kies een temperatuur met de actie climate.set_temperature om de zone te hervatten. De algemene verwarmings-/koelmodus moet ingeschakeld zijn."
+        },
+        "scheduled_temperature_read_only": {
+            "message": "Schakel naar Verwarmen voordat u de temperatuur wijzigt terwijl het schema actief is."
         }
     },
     "device": {

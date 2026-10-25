@@ -3956,6 +3956,9 @@
         },
         "resume_target_unknown": {
             "message": "Esta zona continua em proteção contra gelo e não é conhecida uma temperatura definida confirmada. Escolha uma temperatura com a ação climate.set_temperature para a reativar. O modo geral de aquecimento/climatização tem de estar ativado."
+        },
+        "scheduled_temperature_read_only": {
+            "message": "Mude para o modo Aquecimento antes de alterar a temperatura durante o programa."
         }
     },
     "device": {

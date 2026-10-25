@@ -3956,6 +3956,9 @@
         },
         "resume_target_unknown": {
             "message": "Ta strefa nadal działa w trybie ochrony przed zamarzaniem i nie jest znana potwierdzona temperatura zadana. Wybierz temperaturę za pomocą akcji climate.set_temperature, aby ją uruchomić. Ogólny tryb ogrzewania/chłodzenia musi być włączony."
+        },
+        "scheduled_temperature_read_only": {
+            "message": "Przełącz na tryb ogrzewania przed zmianą temperatury podczas działania harmonogramu."
         }
     },
     "device": {

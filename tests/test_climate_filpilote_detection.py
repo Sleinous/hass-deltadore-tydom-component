@@ -1249,15 +1249,6 @@ class LocalModeZoneTests(IsolatedAsyncioTestCase):
                 "ambientTemperature": 22.41,
             },
         )
-        if generic_setpoint:
-            entity._device._metadata["setpoint"] = {
-                "type": "numeric",
-                "permission": "rw",
-                "min": 10,
-                "max": 30,
-            }
-            entity = HaClimate(entity._device, hass=MagicMock())
-        return entity, client
 
     @staticmethod
     def _calybox_230(*, local_mode="NORMAL", thermic_level="AUTO"):
@@ -2351,6 +2342,398 @@ class CommandNotificationTests(IsolatedAsyncioTestCase):
         entity.async_write_ha_state.assert_called_once()
         self.assertEqual(entity.target_temperature, 21)
         self.assertEqual(client.put_devices_data.await_count, sent_before_expiry)
+
+
+class Rf7110ScheduledModeTests(IsolatedAsyncioTestCase):
+    """Validate PR #534 independently of Tywell and Calybox contracts."""
+
+    @staticmethod
+    def _rf7110_zone(*, local_mode="NORMAL", use_mode="SCHED", **updates):
+        metadata = {
+            "authorization": {
+                "type": "string",
+                "permission": "r",
+                "enum_values": ["STOP", "HEATING"],
+            },
+            "comfortMode": {
+                "type": "string",
+                "permission": "w",
+                "enum_values": ["STOP", "HEATING"],
+            },
+            "localMode": {
+                "type": "string",
+                "permission": "rw",
+                "enum_values": ["NORMAL", "STOP", "ANTI_FROST", "ABSENCE"],
+            },
+            "useMode": {
+                "type": "string",
+                "permission": "rw",
+                "enum_values": ["SCHED", "OVERRIDE", "MANUAL"],
+            },
+            "heatSetpoint": {
+                "type": "numeric",
+                "permission": "rw",
+                "min": 1.0,
+                "max": 50.0,
+                "step": 0.5,
+            },
+            "absenceSetpoint": {
+                "type": "numeric",
+                "permission": "rw",
+                "min": 5.0,
+                "max": 16.0,
+                "step": 0.5,
+            },
+            "antiFrostSetpoint": {
+                "type": "numeric",
+                "permission": "rw",
+                "min": 5.0,
+                "max": 16.0,
+                "step": 0.5,
+            },
+        }
+        data = {
+            "authorization": "HEATING",
+            "localMode": local_mode,
+            "useMode": use_mode,
+            "heatSetpoint": 19.5,
+            "minHeatSetpoint": 15.0,
+            "maxHeatSetpoint": 25.0,
+            "absenceSetpoint": 10.0,
+            "antiFrostSetpoint": 8.0,
+            "openingDetected": False,
+            "antiFrostWhenOff": True,
+            "loadSheddingOn": False,
+            "temperature": 19.51,
+        }
+        data.update(updates)
+        return _thermostat(metadata=metadata, data=data)
+
+    def test_scheduled_zone_exposes_auto_and_reports_live_limits(self) -> None:
+        """Map schedule state to AUTO and retain the configured heat limits."""
+        entity, _client = self._rf7110_zone()
+
+        self.assertEqual(
+            entity._attr_hvac_modes,
+            [HVACMode.OFF, HVACMode.HEAT, HVACMode.AUTO],
+        )
+        self.assertEqual(entity.hvac_mode, HVACMode.AUTO)
+        self.assertEqual(entity.min_temp, 15.0)
+        self.assertEqual(entity.max_temp, 25.0)
+        self.assertEqual(entity.target_temperature, 19.5)
+        self.assertFalse(
+            entity.supported_features & ClimateEntityFeature.TARGET_TEMPERATURE
+        )
+        self.assertEqual(
+            entity._attr_preset_modes,
+            [entities_module.PRESET_NONE, entities_module.PRESET_AWAY],
+        )
+
+    def test_scheduled_target_is_available_as_read_only_sensor(self) -> None:
+        """Keep the scheduled target visible separately from climate controls."""
+        entity, _client = self._rf7110_zone()
+
+        with patch.object(entities_module, "is_binary_attribute", return_value=False):
+            sensors = entity.get_sensors()
+
+        sensor = next(
+            sensor
+            for sensor in sensors
+            if getattr(sensor, "_attribute", None) == "heatSetpoint"
+        )
+        self.assertEqual(sensor.native_value, 19.5)
+        self.assertEqual(sensor._attr_unique_id, "10_20_heatSetpoint")
+        self.assertFalse(hasattr(sensor, "async_set_temperature"))
+        self.assertFalse(
+            entity.supported_features & ClimateEntityFeature.TARGET_TEMPERATURE
+        )
+
+    async def test_scheduled_zone_modes_use_the_matching_tydom_registers(self) -> None:
+        """Use the schedule register for Auto and STOP for a full stop."""
+        entity, client = self._rf7110_zone(use_mode="MANUAL")
+
+        await entity.async_set_hvac_mode(HVACMode.AUTO)
+        client.put_devices_data.assert_awaited_once_with("20", "10", "useMode", "SCHED")
+        client.put_devices_data.reset_mock()
+        entity._device.useMode = "SCHED"  # TYDOM confirms the schedule change.
+
+        await entity.async_set_hvac_mode(HVACMode.HEAT)
+        client.put_devices_data.assert_awaited_once_with(
+            "20", "10", "useMode", "MANUAL"
+        )
+        client.put_devices_data.reset_mock()
+
+        await entity.async_set_hvac_mode(HVACMode.OFF)
+        client.put_devices_data.assert_awaited_once_with(
+            "20", "10", "localMode", "STOP"
+        )
+
+    async def test_scheduled_zone_auto_clears_absence_and_restores_schedule(
+        self,
+    ) -> None:
+        """Selecting AUTO exits absence and selects schedule control."""
+        entity, client = self._rf7110_zone(local_mode="ABSENCE", use_mode="MANUAL")
+
+        await entity.async_set_hvac_mode(HVACMode.AUTO)
+
+        client.put_devices_data.assert_has_awaits(
+            [
+                call("20", "10", "localMode", "NORMAL"),
+                call("20", "10", "useMode", "SCHED"),
+            ]
+        )
+
+    async def test_active_absence_and_frost_targets_use_their_own_registers(
+        self,
+    ) -> None:
+        """Display and edit the setpoint associated with the active local mode."""
+        entity, client = self._rf7110_zone(local_mode="ABSENCE", use_mode="MANUAL")
+
+        self.assertEqual(entity.hvac_mode, HVACMode.HEAT)
+        self.assertEqual(entity.preset_mode, entities_module.PRESET_AWAY)
+        self.assertEqual(entity.target_temperature, 10.0)
+        self.assertEqual((entity.min_temp, entity.max_temp), (5.0, 16.0))
+        await entity.async_set_temperature(temperature=12.5)
+        client.put_devices_data.assert_awaited_once_with(
+            "20", "10", "absenceSetpoint", "12.5"
+        )
+
+        scheduled, scheduled_client = self._rf7110_zone()
+        with self.assertRaisesRegex(Exception, "Switch to Heat mode"):
+            await scheduled.async_set_temperature(temperature=21.0)
+        scheduled_client.put_devices_data.assert_not_awaited()
+
+        entity, client = self._rf7110_zone(local_mode="ANTI_FROST", use_mode="MANUAL")
+        self.assertEqual(entity.target_temperature, 8.0)
+        await entity.async_set_temperature(temperature=9.5)
+        client.put_devices_data.assert_awaited_once_with(
+            "20", "10", "antiFrostSetpoint", "9.5"
+        )
+
+    def test_window_open_and_load_shedding_are_reported_as_standard_idle_states(
+        self,
+    ) -> None:
+        """Expose the cause through sensors while hvac_action stays a HA enum."""
+        window_open, _client = self._rf7110_zone(
+            openingDetected=True, localMode="NORMAL"
+        )
+        self.assertEqual(window_open.target_temperature, 8.0)
+        self.assertEqual(window_open.hvac_action, entities_module.HVACAction.IDLE)
+
+        stopped_by_window, _client = self._rf7110_zone(
+            openingDetected=True, antiFrostWhenOff=False, localMode="NORMAL"
+        )
+        self.assertEqual(stopped_by_window.hvac_action, entities_module.HVACAction.IDLE)
+
+        load_shed, _client = self._rf7110_zone(loadSheddingOn=True)
+        self.assertEqual(load_shed.hvac_action, entities_module.HVACAction.IDLE)
+
+
+class CrossProfileHeatingMatrixTests(IsolatedAsyncioTestCase):
+    """Protect both real-site contracts from the RF7110 Auto/Manual feature."""
+
+    def site_zone(self, *, device_type="boiler", use_mode="SCHED", cooling=False):
+        """Model the shared capabilities read from the two sites, without IDs."""
+        modes = ["STOP", "HEATING", "COOLING"] if cooling else ["STOP", "HEATING"]
+        metadata = {
+            "authorization": {"permission": "r", "enum_values": modes},
+            "localMode": {
+                "permission": "rw",
+                "enum_values": ["NORMAL", "STOP", "ANTI_FROST", "ABSENCE"],
+            },
+            "useMode": {
+                "permission": "rw",
+                "enum_values": ["SCHED", "OVERRIDE", "MANUAL"],
+            },
+            "thermicLevel": {"permission": "rw", "enum_values": ["STOP", "ANTI_FROST"]},
+            **{
+                key: {"permission": "rw", "type": "numeric", "min": 10, "max": 30}
+                for key in ("setpoint", "heatSetpoint", "overrideSetpoint")
+            },
+        }
+        data = {
+            "authorization": "COOLING" if cooling else "HEATING",
+            "localMode": "NORMAL",
+            "useMode": use_mode,
+            "thermicLevel": None,
+            "setpoint": 19.5,
+            "heatSetpoint": 19.5,
+            "overrideSetpoint": 21,
+            "minHeatSetpoint": 10,
+            "maxHeatSetpoint": 30,
+        }
+        if cooling:
+            metadata["coolSetpoint"] = {
+                "permission": "rw",
+                "type": "numeric",
+                "min": 16,
+                "max": 28,
+            }
+            data["coolSetpoint"] = 24
+        if device_type != "boiler":
+            data["area_id"] = "7"
+        entity, client = _thermostat(
+            metadata=metadata, data=data, device_type=device_type
+        )
+        client.general_climate = types.SimpleNamespace(
+            mode="COOLING" if cooling else "HEATING", lock_reason=None
+        )
+        client.put_area_data = AsyncMock()
+        client.put_home_hvac_mode = AsyncMock()
+        entity.async_write_ha_state = Mock()
+        self.addCleanup(entity._get_command_tracker().close)
+        return entity, client
+
+    async def test_site_contracts_keep_target_control_in_every_use_mode(self):
+        """SCHED/MANUAL/OVERRIDE never turns Tybox/Typass or Tywell into RF7110."""
+        for device_type in (
+            "boiler",
+            "re2020Controller",
+            "re2020ControlBoiler",
+            "re2020ControlPassive",
+        ):
+            for use_mode in ("SCHED", "MANUAL", "OVERRIDE"):
+                with self.subTest(device_type=device_type, use_mode=use_mode):
+                    entity, client = self.site_zone(
+                        device_type=device_type, use_mode=use_mode
+                    )
+                    self.assertFalse(entity._uses_scheduled_local_mode)
+                    self.assertNotIn(HVACMode.AUTO, entity.hvac_modes)
+                    self.assertTrue(
+                        entity.supported_features
+                        & ClimateEntityFeature.TARGET_TEMPERATURE
+                    )
+                    self.assertEqual(
+                        entity.target_temperature, 19.5 if use_mode == "SCHED" else 21
+                    )
+                    await entity.async_set_temperature(temperature=22)
+                    register = (
+                        "overrideSetpoint"
+                        if use_mode != "SCHED"
+                        else "heatSetpoint"
+                        if device_type == "boiler"
+                        else "setpoint"
+                    )
+                    if device_type == "boiler":
+                        client.put_devices_data.assert_awaited_once_with(
+                            "20", "10", register, "22"
+                        )
+                        client.put_area_data.assert_not_awaited()
+                    else:
+                        client.put_area_data.assert_awaited_once_with(
+                            "7", register, "22"
+                        )
+                        client.put_devices_data.assert_not_awaited()
+                    client.put_home_hvac_mode.assert_not_awaited()
+
+    async def test_site_off_heat_away_none_preserves_local_routes(self):
+        """The RF7110 feature must not write useMode on either site's controllers."""
+        for device_type in (
+            "boiler",
+            "re2020Controller",
+            "re2020ControlBoiler",
+            "re2020ControlPassive",
+        ):
+            with self.subTest(device_type=device_type):
+                entity, client = self.site_zone(device_type=device_type)
+                await entity.async_set_hvac_mode(HVACMode.OFF)
+                entity._device.localMode = "STOP"
+                self.assertEqual(entity.hvac_mode, HVACMode.OFF)
+                await entity.async_set_hvac_mode(HVACMode.HEAT)
+                entity._device.localMode = "NORMAL"
+                self.assertEqual(entity.hvac_mode, HVACMode.HEAT)
+                await entity.async_set_preset_mode(entities_module.PRESET_AWAY)
+                entity._device.localMode = "ABSENCE"
+                self.assertEqual(entity.preset_mode, entities_module.PRESET_AWAY)
+                await entity.async_set_preset_mode(entities_module.PRESET_NONE)
+                expected = [
+                    ("localMode", value)
+                    for value in ("STOP", "NORMAL", "ABSENCE", "NORMAL")
+                ]
+                sender = (
+                    client.put_devices_data
+                    if device_type == "boiler"
+                    else client.put_area_data
+                )
+                actual = [(c.args[-2], c.args[-1]) for c in sender.await_args_list]
+                self.assertEqual(actual, expected)
+                client.put_home_hvac_mode.assert_not_awaited()
+
+    def test_reversible_areas_keep_cooling_and_reject_rf7110_classification(self):
+        """Read-only COOLING authorisation still identifies a reversible area."""
+        for device_type in ("re2020Controller", "re2020ControlBoiler"):
+            entity, _ = self.site_zone(device_type=device_type, cooling=True)
+            self.assertFalse(entity._uses_scheduled_local_mode)
+            self.assertIn(HVACMode.COOL, entity.hvac_modes)
+            self.assertEqual(entity.hvac_mode, HVACMode.COOL)
+            self.assertTrue(
+                entity.supported_features & ClimateEntityFeature.TARGET_TEMPERATURE
+            )
+
+    def test_rf7110_absence_and_frost_follow_their_own_target(self):
+        """Check heat demand both below and above the explicit protection targets."""
+        for local_mode, target in (("ABSENCE", 10), ("ANTI_FROST", 8)):
+            for temperature in (target - 1, target + 1):
+                with self.subTest(local_mode=local_mode, temperature=temperature):
+                    entity, _ = Rf7110ScheduledModeTests._rf7110_zone(
+                        local_mode=local_mode,
+                        use_mode="MANUAL",
+                        temperature=temperature,
+                        thermicLevel="ANTI_FROST",
+                    )
+                    self.assertEqual(entity.target_temperature, target)
+                    self.assertEqual((entity.min_temp, entity.max_temp), (5, 16))
+                    self.assertEqual(
+                        entity.hvac_action,
+                        entities_module.HVACAction.HEATING
+                        if temperature < target
+                        else entities_module.HVACAction.IDLE,
+                    )
+                    self.assertEqual(
+                        entity.preset_mode,
+                        entities_module.PRESET_AWAY
+                        if local_mode == "ABSENCE"
+                        else entities_module.PRESET_NONE,
+                    )
+
+    async def test_rf7110_general_off_and_away_cannot_be_bypassed(self):
+        """General locks take priority over Auto/Manual and editable frost targets."""
+        for reason in ("off", "absence"):
+            entity, client = Rf7110ScheduledModeTests._rf7110_zone()
+            client.general_climate = types.SimpleNamespace(
+                mode="STOP" if reason == "off" else "HEATING", lock_reason=reason
+            )
+            self.addCleanup(entity._get_command_tracker().close)
+            for request in (
+                entity.async_set_hvac_mode(HVACMode.HEAT),
+                entity.async_set_temperature(temperature=21),
+            ):
+                with (
+                    patch.dict(
+                        sys.modules, {"homeassistant.exceptions": _ha_exceptions}
+                    ),
+                    self.assertRaises(_HomeAssistantError) as error,
+                ):
+                    await request
+                self.assertEqual(
+                    error.exception.translation_key,
+                    "general_hvac_stopped"
+                    if reason == "off"
+                    else "general_hvac_absence",
+                )
+            client.put_devices_data.assert_not_awaited()
+
+    def test_partial_metadata_never_enables_schedule_mode_by_guessing(self):
+        """Missing/one-way dedicated registers keep the established local route."""
+        for register in ("absenceSetpoint", "antiFrostSetpoint", "useMode"):
+            entity, _ = Rf7110ScheduledModeTests._rf7110_zone()
+            if register == "useMode":
+                entity._device._metadata[register]["permission"] = "w"
+            else:
+                entity._device._metadata.pop(register)
+            rebuilt = HaClimate(entity._device, MagicMock())
+            self.assertFalse(rebuilt._uses_scheduled_local_mode)
+            self.assertNotIn(HVACMode.AUTO, rebuilt.hvac_modes)
 
 
 if __name__ == "__main__":

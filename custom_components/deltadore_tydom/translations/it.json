@@ -3956,6 +3956,9 @@
         },
         "resume_target_unknown": {
             "message": "Questa zona è ancora in protezione antigelo e non è nota una temperatura impostata confermata. Scegliere una temperatura con l’azione climate.set_temperature per riattivarla. La modalità generale di riscaldamento/climatizzazione deve essere attiva."
+        },
+        "scheduled_temperature_read_only": {
+            "message": "Passare alla modalità Riscaldamento prima di modificare la temperatura durante il programma."
         }
     },
     "device": {
