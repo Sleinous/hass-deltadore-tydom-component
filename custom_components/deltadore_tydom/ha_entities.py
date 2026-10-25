@@ -130,9 +130,6 @@ from .official_association_tutorials import get_association_illustration_data_ur
 
 ASSOCIATION_GUIDE_EVENT = f"{DOMAIN}_association_guide"
 
-# Tybox Home RF 210 PAC/boiler preset for TYDOM frost protection.
-PRESET_FROST_PROTECTION = "frost_protection"
-
 
 _BINARY_TRUE_VALUES = frozenset({"1", "on", "true", "yes"})
 _BINARY_FALSE_VALUES = frozenset({"0", "off", "false", "no"})
@@ -2733,10 +2730,8 @@ class HaClimate(ClimateEntity, HAEntity):
                 add_preset(mode)
 
         thermic_level = metadata.get("thermicLevel", {})
-        thermic_level_values = thermic_level.get("enum_values", [])
-        self._has_no_regul_thermic_level = "NO_REGUL" in thermic_level_values
-        for mode in thermic_level_values:
-            if mode not in ["STOP", "AUTO", "NO_REGUL"]:
+        for mode in thermic_level.get("enum_values", []):
+            if mode not in ["STOP", "AUTO"]:
                 add_preset(mode)
 
         # Add common presets if available
@@ -3075,40 +3070,6 @@ class HaClimate(ClimateEntity, HAEntity):
             else:
                 self._attr_supported_features &= ~ClimateEntityFeature.PRESET_MODE
 
-        # PAC / boiler profile (Tybox Home RF 210): keep this distinct preset
-        # path limited to a standalone, reversible device with the diagnostic
-        # registers observed on that model. Area-controlled Tywell/Typass
-        # climates and existing localMode zone profiles keep their established
-        # mode and command paths.
-        local_mode_meta = (self._device._metadata or {}).get("localMode", {})
-        use_mode_meta = (self._device._metadata or {}).get("useMode", {})
-        self._uses_local_mode_presets = (
-            not self._is_filpilote
-            and not self._uses_local_mode
-            and not self._is_area_controlled
-            and not self._device.is_area_trv
-            and HVACMode.COOL in self._attr_hvac_modes
-            and isinstance(use_mode_meta, dict)
-            and "SCHED" in use_mode_meta.get("enum_values", [])
-            and isinstance(local_mode_meta, dict)
-            and "w" in local_mode_meta.get("permission", "")
-            and "ABSENCE" in local_mode_meta.get("enum_values", [])
-            and "ANTI_FROST" in local_mode_meta.get("enum_values", [])
-        )
-        if self._uses_local_mode_presets:
-            enum_values = local_mode_meta.get("enum_values", [])
-            presets = []
-            if "ABSENCE" in enum_values:
-                presets.append(PRESET_AWAY)
-            if "ANTI_FROST" in enum_values:
-                presets.append(PRESET_FROST_PROTECTION)
-            # NORMAL = normal regulation; STOP is HVAC OFF, not a preset.
-            self._attr_preset_modes = presets
-            self._attr_supported_features |= ClimateEntityFeature.PRESET_MODE
-            # This translation key has no entity name, so the device name stays.
-            if not self._device.is_derived_area_climate:
-                self._attr_translation_key = "tydom_climate"
-
         # Fan speed (Naviclim X3D reversible AC). Naviclim zones expose a numeric
         # `speed` (1..3) for manual speeds and a `speedString` ["AUTO"] register
         # for automatic mode; we surface these as HA fan modes ("auto", "1", "2",
@@ -3197,15 +3158,6 @@ class HaClimate(ClimateEntity, HAEntity):
         modes = list(self._attr_preset_modes)
         if self._supports_absence_mode() and PRESET_AWAY not in modes:
             modes.append(PRESET_AWAY)
-        # Publish "none" only for the two Tybox Home RF 210 profiles that
-        # can legitimately resolve to it; do not add a new preset choice to
-        # unrelated climate models.
-        if (
-            modes
-            and PRESET_NONE not in modes
-            and (self._uses_local_mode_presets or self._has_no_regul_thermic_level)
-        ):
-            modes.append(PRESET_NONE)
         return modes
 
     def _get_command_tracker(self) -> ClimateCommandTracker:
@@ -3390,12 +3342,6 @@ class HaClimate(ClimateEntity, HAEntity):
         if self._device.is_area_trv:
             return HVACMode.HEAT
 
-        if (
-            self._uses_local_mode_presets
-            and getattr(self._device, "localMode", None) == "STOP"
-        ):
-            return HVACMode.OFF
-
         if self._uses_local_mode:
             local_mode = getattr(self._device, "localMode", None)
             # localMode is the zone's on/off order. A separate thermicLevel
@@ -3483,12 +3429,6 @@ class HaClimate(ClimateEntity, HAEntity):
             # from idle: report OFF when the order is STOP, HEATING otherwise.
             level = getattr(self._device, "thermicLevel", None)
             return HVACAction.OFF if level == "STOP" else HVACAction.HEATING
-
-        if (
-            self._uses_local_mode_presets
-            and getattr(self._device, "localMode", None) == "STOP"
-        ):
-            return HVACAction.OFF
 
         if self._uses_local_mode:
             if self._resolve_hvac_mode() == HVACMode.OFF:
@@ -3787,13 +3727,6 @@ class HaClimate(ClimateEntity, HAEntity):
                 if thermic_level == "COMFORT":
                     return PRESET_COMFORT
             return PRESET_NONE if self._attr_preset_modes else None
-        if self._uses_local_mode_presets:
-            local_mode = getattr(self._device, "localMode", None)
-            if local_mode == "ABSENCE":
-                return PRESET_AWAY
-            if local_mode == "ANTI_FROST":
-                return PRESET_FROST_PROTECTION
-            return PRESET_NONE
         if (
             not self._device.is_area_trv
             and getattr(self._device, "localMode", None) == "ABSENCE"
@@ -3844,37 +3777,6 @@ class HaClimate(ClimateEntity, HAEntity):
                         self._device.set_local_mode("NORMAL"),
                     )
                 return
-        if self._uses_local_mode_presets:
-            # STOP is HVAC OFF, not an active preset. Clearing a preset
-            # while already stopped must not turn the zone back on.
-            if (
-                preset_mode == PRESET_NONE
-                and getattr(self._device, "localMode", None) == "STOP"
-            ):
-                return
-            target = {
-                PRESET_AWAY: "ABSENCE",
-                PRESET_FROST_PROTECTION: "ANTI_FROST",
-                PRESET_NONE: "NORMAL",
-            }.get(preset_mode)
-            local_mode_metadata = (self._device._metadata or {}).get("localMode", {})
-            if (
-                target is not None
-                and isinstance(local_mode_metadata, dict)
-                and target in local_mode_metadata.get("enum_values", [])
-                and "w" in local_mode_metadata.get("permission", "")
-            ):
-                await self._async_track_command(
-                    "preset_mode",
-                    preset_mode,
-                    self._device._tydom_client.put_devices_data(
-                        self._device._id,
-                        self._device._endpoint,
-                        "localMode",
-                        target,
-                    ),
-                )
-            return
         if self._uses_local_mode:
             if preset_mode == PRESET_AWAY:
                 await self._async_track_command(
