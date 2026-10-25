@@ -158,7 +158,6 @@ class ClimateSetpointPreservationTests(IsolatedAsyncioTestCase):
         )
         self.assertEqual(device.setpoint, 20)
 
-
     async def test_area_thermostat_uses_writable_comfort_mode(self) -> None:
         """Use device-level comfortMode when the area thermostat exposes it."""
         device, client = _boiler(

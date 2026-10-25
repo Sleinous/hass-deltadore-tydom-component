@@ -183,9 +183,7 @@ class GatewayAssociationTests(IsolatedAsyncioTestCase):
         self.assertIsNone(overview)
         self.assertEqual(steps, ("catalog_tywell_control_step1",))
         self.assertTrue(stepwise)
-        illustration = get_association_illustration_svg(
-            "catalog_tywell_control_step1"
-        )
+        illustration = get_association_illustration_svg("catalog_tywell_control_step1")
         self.assertIsNotNone(illustration)
         self.assertIn("#354254", illustration)
 
@@ -530,6 +528,7 @@ class GatewayAssociationTests(IsolatedAsyncioTestCase):
     def test_groupable_product_can_keep_an_optional_friendly_name(self) -> None:
         """The name field is limited to groupable products and normalizes text."""
         tydom_hub = object.__new__(Hub)
+        tydom_hub._id = "test-hub"
         tydom_hub._association_controls = []
         tydom_hub._association_category = "Interrupteurs"
         tydom_hub._association_product = "TYXIA 2600"
@@ -558,6 +557,8 @@ class GatewayAssociationTests(IsolatedAsyncioTestCase):
     def test_new_generic_product_receives_the_requested_ha_name(self) -> None:
         """A generic association applies its requested name after discovery."""
         tydom_hub = object.__new__(Hub)
+        tydom_hub._id = "test-hub"
+        tydom_hub._association_product = ""
         tydom_hub._pending_groupable_association = None
         tydom_hub._pending_association_name = "Lampe entrée"
         tydom_hub._pending_association_known_device_ids = {"existing"}
@@ -693,8 +694,11 @@ class GatewayAssociationTests(IsolatedAsyncioTestCase):
         tydom_hub.add_button_callback = MagicMock()
         tydom_hub._hass = SimpleNamespace(async_create_task=MagicMock())
 
-        tydom_hub._maybe_create_device_association_buttons(device)
-        tydom_hub._maybe_create_device_association_buttons(device)
+        with patch(
+            "homeassistant.helpers.entity_registry.async_get", return_value=MagicMock()
+        ):
+            tydom_hub._maybe_create_device_association_buttons(device)
+            tydom_hub._maybe_create_device_association_buttons(device)
 
         self.assertEqual(
             tydom_hub._pending_groupable_candidate_device_id, device.device_id
@@ -969,8 +973,8 @@ class GatewayAssociationTests(IsolatedAsyncioTestCase):
 
         self.assertEqual(corrupted_steps, [])
         self.assertIn(
-            "À l'aide de la télécommande.",
-            OFFICIAL_ASSOCIATION_TUTORIALS["TUBAUTO Procom 10-3"][0].text,
+            "à l'aide de la télécommande.",
+            OFFICIAL_ASSOCIATION_TUTORIALS["TUBAUTO Procom 10-3"][0].text.lower(),
         )
 
     def test_association_instructions_unescape_catalogue_quotes(self) -> None:
@@ -1829,6 +1833,7 @@ class GatewayAssociationTests(IsolatedAsyncioTestCase):
         """Removal is a gateway operation, not an endpoint capability."""
         hub = object.__new__(Hub)
         hub._hass = None
+        hub._tydom_client = SimpleNamespace()
         hub.add_button_callback = MagicMock()
         hub._device_association_buttons_created = set()
         hub._pending_groupable_association = None

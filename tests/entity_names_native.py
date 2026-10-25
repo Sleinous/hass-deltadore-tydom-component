@@ -53,7 +53,7 @@ def attach_platform(entity, language, domain):
         f"component.deltadore_tydom.entity.{domain}.{key}.name": data["name"]
         for key, data in document["entity"][domain].items()
     }
-    entity.platform_data = SimpleNamespace(
+    platform = SimpleNamespace(
         platform_name="deltadore_tydom",
         domain=domain,
         platform_translations=names,
@@ -63,6 +63,8 @@ def attach_platform(entity, language, domain):
         component_translations={},
         object_id_component_translations={},
     )
+    entity.platform = platform
+    entity.platform_data = platform
     return entity
 
 
@@ -777,6 +779,7 @@ class DiagnosticSensorTests(TestCase):
             _metadata={},
             temperature=21.5,
             hygroIn=56.5,
+            loadSheddingOn=True,
             **self.technical_values,
         )
         wrapper = HAEntity()
@@ -786,7 +789,8 @@ class DiagnosticSensorTests(TestCase):
         sensors = wrapper.get_sensors()
         by_attribute = {sensor._attribute: sensor for sensor in sensors}
         self.assertEqual(
-            set(by_attribute), {*self.technical_values, "temperature", "hygroIn"}
+            set(by_attribute),
+            {*self.technical_values, "temperature", "hygroIn", "loadSheddingOn"},
         )
         for attribute in self.technical_values:
             self.assertEqual(
@@ -794,6 +798,7 @@ class DiagnosticSensorTests(TestCase):
             )
         self.assertIsInstance(by_attribute["activationCpt"], GenericSensor)
         self.assertIsInstance(by_attribute["loadSheddingOn"], GenericBinarySensor)
+        self.assertIsNone(by_attribute["loadSheddingOn"].entity_category)
         self.assertIsNone(by_attribute["temperature"].entity_category)
         self.assertIsNone(by_attribute["hygroIn"].entity_category)
         self.assertEqual(wrapper.get_sensors(), [])
@@ -835,7 +840,6 @@ class EntityRegistryNameTests(IsolatedAsyncioTestCase):
         """Moving technical entities keeps IDs, custom names and disabled choices."""
         with TemporaryDirectory() as config_dir:
             hass = HomeAssistant(config_dir)
-            dr.async_setup(hass)
             await dr.async_load(hass)
             registry = er.async_get(hass)
             await registry.async_load()
@@ -875,7 +879,6 @@ class EntityRegistryNameTests(IsolatedAsyncioTestCase):
         """Reuse the existing registry ID after translating its original name."""
         with TemporaryDirectory() as config_dir:
             hass = HomeAssistant(config_dir)
-            dr.async_setup(hass)
             await dr.async_load(hass)
             registry = er.async_get(hass)
             await registry.async_load()

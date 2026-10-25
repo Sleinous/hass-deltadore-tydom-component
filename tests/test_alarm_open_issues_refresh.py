@@ -68,8 +68,7 @@ def _load_alarm_update_helpers():
         for node in alarm_node.body
         if isinstance(node, ast.Assign)
         and any(
-            isinstance(target, ast.Name)
-            and target.id == "_ACTOR_HISTORY_STATES"
+            isinstance(target, ast.Name) and target.id == "_ACTOR_HISTORY_STATES"
             for target in node.targets
         )
     )
@@ -366,7 +365,9 @@ class AlarmChangedByCorrelationTests(IsolatedAsyncioTestCase):
 
         self.assertEqual(entity._attr_changed_by, "TL 2000 Sandra")
 
-    async def test_actor_survives_until_state_update_without_alarm_mode_event(self) -> None:
+    async def test_actor_survives_until_state_update_without_alarm_mode_event(
+        self,
+    ) -> None:
         """An eventAlarm can precede the next normal device update."""
         entity = self._entity(_AlarmControlPanelState.ARMED_NIGHT)
         self._publish_actor(entity, "disarmed")

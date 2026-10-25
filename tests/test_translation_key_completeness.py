@@ -79,7 +79,9 @@ class TranslationKeyCompletenessTests(TestCase):
                 and key.rsplit("_", 1)[-1] in ENERGY_INDEX_SHARE_CATEGORIES
             )
         } | set(ENERGY_INDEX_SHARE_EXTRA_KEYS)
-        self.assertTrue(reference_keys, "no energydistrib/energyindex keys found in en.json")
+        self.assertTrue(
+            reference_keys, "no energydistrib/energyindex keys found in en.json"
+        )
 
         for locale in sorted(TRANSLATIONS.glob("*.json")):
             if locale.name == REFERENCE:
