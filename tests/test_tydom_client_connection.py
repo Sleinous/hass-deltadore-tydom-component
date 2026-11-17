@@ -88,6 +88,7 @@ _module(
 )
 _module(
     "custom_components.deltadore_tydom.tydom.MessageHandler",
+    device_name={},
     MessageHandler=MagicMock(),
 )
 _module(
@@ -1064,6 +1065,35 @@ class TestDevicePolling(IsolatedAsyncioTestCase):
         client.get_poll_device_data.assert_awaited_once_with(
             "/devices/8/endpoints/8/data"
         )
+
+    async def test_diagnostic_zero_id_is_limited_to_named_remote_energy(self) -> None:
+        """The experimental wire change must only target the reported endpoint."""
+        for prefix, name, command, expected in (
+            (b"\x02", "Calybox 2020WT ", "energyDistrib", "0"),
+            (b"\x02", "Another meter", "energyDistrib", None),
+            (b"", "Calybox 2020WT", "energyDistrib", None),
+            (b"\x02", "Calybox 2020WT", "alarmCmd", None),
+        ):
+            with self.subTest(prefix=prefix, name=name, command=command):
+                client = self._client()
+                client._cmd_prefix = prefix
+                client._message_handler = MagicMock()
+                completion = asyncio.Event()
+                completion.set()
+                client._message_handler.register_cdata_poll.return_value = completion
+                client._message_handler.prepare_request.return_value = (
+                    "request-1",
+                    b"request",
+                )
+                client.send_bytes = AsyncMock()
+                with patch.dict(client_module.device_name, {"20_10": name}, clear=True):
+                    await client.get_poll_device_data(
+                        f"/devices/10/endpoints/20/cdata?name={command}"
+                    )
+                headers = client._message_handler.prepare_request.call_args.kwargs[
+                    "headers"
+                ]
+                self.assertEqual(headers.get("Transac-Id"), expected)
 
     async def test_cdata_poll_waits_for_stream_completion(self) -> None:
         """A cdata GET must stay pending until the handler receives its EOR."""

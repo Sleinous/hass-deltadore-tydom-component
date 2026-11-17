@@ -418,9 +418,7 @@ class ProtocolResponseTests(IsolatedAsyncioTestCase):
         client._zone_night = "1,3"
         client._zone_away = "1,2,3"
         client.put_alarm_cdata = AsyncMock()
-        alarm = TydomAlarm(
-            client, "10_20", "20", "Alarm", "alarm", "10", {}, data
-        )
+        alarm = TydomAlarm(client, "10_20", "20", "Alarm", "alarm", "10", {}, data)
         return alarm, client
 
     async def test_alarm_profile_reduction_disables_only_surplus_zones(self) -> None:
@@ -489,9 +487,7 @@ class ProtocolResponseTests(IsolatedAsyncioTestCase):
 
     async def test_alarm_profile_uses_updated_integration_configuration(self) -> None:
         """Profile calculations must use current integration option values."""
-        alarm, client = self._profile_alarm(
-            {"zone1State": "ON", "zone2State": "OFF"}
-        )
+        alarm, client = self._profile_alarm({"zone1State": "ON", "zone2State": "OFF"})
         client._zone_home = "2"
 
         await alarm.alarm_arm_home("123456")
@@ -554,9 +550,7 @@ class ProtocolResponseTests(IsolatedAsyncioTestCase):
 
         await alarm.alarm_disarm("unused-code")
 
-        client.put_devices_data.assert_awaited_once_with(
-            "20", "10", "alarmCmd", "OFF"
-        )
+        client.put_devices_data.assert_awaited_once_with("20", "10", "alarmCmd", "OFF")
         client.put_alarm_cdata.assert_not_awaited()
 
     async def test_legacy_global_arm_uses_regular_data(self) -> None:
@@ -565,9 +559,7 @@ class ProtocolResponseTests(IsolatedAsyncioTestCase):
 
         await alarm.alarm_arm_away("unused-code")
 
-        client.put_devices_data.assert_awaited_once_with(
-            "20", "10", "alarmCmd", "ON"
-        )
+        client.put_devices_data.assert_awaited_once_with("20", "10", "alarmCmd", "ON")
         client.put_alarm_cdata.assert_not_awaited()
 
     async def test_legacy_partial_arm_retains_cdata_part_command(self) -> None:
@@ -736,7 +728,9 @@ class ProtocolResponseTests(IsolatedAsyncioTestCase):
         )
         callback.assert_called_once_with()
 
-    async def test_open_issues_return_the_products_reported_by_the_central(self) -> None:
+    async def test_open_issues_return_the_products_reported_by_the_central(
+        self,
+    ) -> None:
         """OPEN_ISSUES must retain only dashboard-safe product metadata."""
         client = MagicMock()
         client.get_historic_cdata = AsyncMock(
@@ -918,6 +912,43 @@ class ProtocolResponseTests(IsolatedAsyncioTestCase):
 
         self.assertTrue(completion_event.is_set())
         self.assertNotIn("request-1", handler._cdata_poll_events)
+
+    async def test_diagnostic_zero_request_and_routed_eor(self) -> None:
+        """The zero-ID probe is framed and its actual pushed EOR is routed."""
+        handler = MessageHandler(MagicMock(), b"\x02")
+        handler.get_type_from_id = MagicMock(return_value="conso")
+        handler.get_name_from_id = MagicMock(return_value="Calybox 2020WT")
+        transaction_id, wire = handler.prepare_request(
+            "GET",
+            "/devices/20/endpoints/10/cdata?name=energyIndex",
+            headers={"Content-Length": "0", "Transac-Id": "0"},
+        )
+        self.assertEqual(transaction_id, "0")
+        self.assertIn(b"Transac-Id: 0\r\n", wire)
+        completion_event = handler.register_cdata_poll(transaction_id)
+        body = b'[{"id":20,"endpoints":[{"id":10,"error":0,"cdata":[{"EOR":true}]}]}]'
+        await handler.route_response(
+            b"\x02PUT /devices/cdata HTTP/1.1\r\n"
+            b"Content-Type: application/json\r\n"
+            + f"Content-Length: {len(body)}\r\n".encode()
+            + b"Transac-Id: 0\r\n\r\n"
+            + body
+        )
+        self.assertTrue(completion_event.is_set())
+
+    async def test_zero_transaction_eor_completes_only_its_waiter(self) -> None:
+        """Exercise the experimental zero-ID probe and unrelated transaction IDs."""
+        handler = MessageHandler(MagicMock(), b"")
+        handler.get_type_from_id = MagicMock(return_value="conso")
+        handler.get_name_from_id = MagicMock(return_value="Calybox 2020WT")
+        completion_event = handler.register_cdata_poll("0")
+        payload = [
+            {"id": 20, "endpoints": [{"id": 10, "error": 0, "cdata": [{"EOR": True}]}]}
+        ]
+        await handler.parse_devices_cdata(payload, "another-transaction")
+        self.assertFalse(completion_event.is_set())
+        await handler.parse_devices_cdata(payload, "0")
+        self.assertTrue(completion_event.is_set())
 
     async def test_empty_devices_response_is_a_valid_inventory(self) -> None:
         """An empty TYDOM inventory must not be reported as an unknown message."""

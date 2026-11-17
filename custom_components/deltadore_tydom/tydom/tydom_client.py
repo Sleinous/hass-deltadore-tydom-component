@@ -11,7 +11,7 @@ import ssl
 import time
 import traceback
 from typing import TYPE_CHECKING, cast
-from urllib.parse import quote
+from urllib.parse import parse_qs, quote, urlsplit
 
 import aiohttp
 import async_timeout
@@ -39,7 +39,7 @@ from .const import (
     MEDIATION_URL,
 )
 from ..home_climate import HomeClimateState, HVAC_OPTIONS
-from .MessageHandler import MessageHandler
+from .MessageHandler import MessageHandler, device_name
 from .tydom_devices import TydomAlarmCommandError
 
 if TYPE_CHECKING:
@@ -1466,11 +1466,30 @@ class TydomClient:
             "Content-Length": "0",
             "Content-Type": "application/json; charset=UTF-8",
         }
+        # DIAGNOSTIC BRANCH ONLY: this name is the affected endpoint's TYDOM
+        # name, not a model identification suitable for a production fix.
+        parts = urlsplit(url)
+        match = re.fullmatch(r"/devices/(\d+)/endpoints/(\d+)/cdata", parts.path)
+        query_name = parse_qs(parts.query).get("name", [""])[0]
+        if (
+            self._cmd_prefix == b"\x02"
+            and match
+            and query_name in {"energyDistrib", "energyInstant", "energyIndex"}
+        ):
+            key = f"{match.group(2)}_{match.group(1)}"
+            if device_name.get(key, "").strip().casefold() == "calybox 2020wt":
+                headers["Transac-Id"] = "0"
+                LOGGER.debug("Calybox diagnostic: sending cdata with transaction ID 0")
         transaction_id, request = self._message_handler.prepare_request(
             "GET", url, headers=headers
         )
         completion_event = self._message_handler.register_cdata_poll(transaction_id)
         try:
+            LOGGER.debug(
+                "Sending cdata poll %s with transaction ID %s",
+                sanitize_log_message(url),
+                transaction_id,
+            )
             await self.send_bytes(self._cmd_prefix + request)
             try:
                 await asyncio.wait_for(
